@@ -1,0 +1,1748 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microsoft Copilot Studio Cost Calculator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        :root {
+            --ms-blue: #0078d4; --ms-blue-dark: #106ebe; --ms-blue-light: #deecf9;
+            --ms-purple: #5c2d91; --ms-green: #107c10; --ms-orange: #ff8c00; --ms-red: #d13438;
+            --bg-primary: #f3f2f1; --bg-secondary: #ffffff; --bg-tertiary: #faf9f8;
+            --text-primary: #323130; --text-secondary: #605e5c; --text-muted: #a19f9d;
+            --border-color: #edebe9;
+            --shadow: 0 2px 4px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.08);
+            --shadow-lg: 0 6px 20px rgba(0,0,0,0.1), 0 16px 40px rgba(0,0,0,0.12);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: var(--text-primary); padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { background: var(--bg-secondary); border-radius: 12px; padding: 24px 32px; margin-bottom: 24px; box-shadow: var(--shadow); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+        .header-left { display: flex; align-items: center; gap: 16px; }
+        .logo { width: 48px; height: 48px; background: linear-gradient(135deg, var(--ms-blue) 0%, var(--ms-purple) 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+        .header h1 { font-size: 1.5rem; font-weight: 600; color: var(--text-primary); }
+        .header p { font-size: 0.875rem; color: var(--text-secondary); margin-top: 2px; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .lang-toggle { display: flex; background: var(--bg-tertiary); border-radius: 8px; padding: 4px; border: 1px solid var(--border-color); }
+        .lang-btn { padding: 8px 16px; border: none; background: transparent; cursor: pointer; font-size: 0.875rem; font-weight: 500; color: var(--text-secondary); border-radius: 6px; transition: all 0.2s; }
+        .lang-btn.active { background: var(--ms-blue); color: white; }
+        .lang-btn:hover:not(.active) { background: var(--bg-primary); }
+        .progress-container { background: var(--bg-secondary); border-radius: 12px; padding: 24px 32px; margin-bottom: 24px; box-shadow: var(--shadow); }
+        .progress-steps { display: flex; justify-content: space-between; position: relative; }
+        .progress-steps::before { content: ''; position: absolute; top: 20px; left: 40px; right: 40px; height: 3px; background: var(--border-color); z-index: 0; }
+        .progress-step { display: flex; flex-direction: column; align-items: center; position: relative; z-index: 1; flex: 1; cursor: pointer; transition: transform 0.2s; }
+        .progress-step:hover { transform: translateY(-2px); }
+        .progress-step:hover .step-circle { box-shadow: 0 4px 12px rgba(0,120,212,0.3); }
+        .step-circle { width: 40px; height: 40px; border-radius: 50%; background: var(--bg-tertiary); border: 3px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.875rem; color: var(--text-muted); transition: all 0.3s; }
+        .progress-step.active .step-circle { background: var(--ms-blue); border-color: var(--ms-blue); color: white; }
+        .progress-step.completed .step-circle { background: var(--ms-green); border-color: var(--ms-green); color: white; }
+        .step-label { margin-top: 8px; font-size: 0.75rem; color: var(--text-muted); text-align: center; max-width: 100px; }
+        .progress-step.active .step-label, .progress-step.completed .step-label { color: var(--text-primary); font-weight: 500; }
+        .main-content { display: flex; gap: 24px; flex-wrap: wrap; }
+        .calculator-section { flex: 2; min-width: 0; background: var(--bg-secondary); border-radius: 12px; padding: 32px; box-shadow: var(--shadow); }
+        .summary-section { flex: 1; min-width: 300px; background: var(--bg-secondary); border-radius: 12px; padding: 24px; box-shadow: var(--shadow); position: sticky; top: 20px; height: fit-content; }
+        /* Stack layout for step 3 (agent configuration needs more space) */
+        .main-content.stack-layout { flex-direction: column; }
+        .main-content.stack-layout .summary-section { position: static; width: 100%; max-width: none; }
+        .step-content { display: none; }
+        .step-content.active { display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .step-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 8px; color: var(--text-primary); }
+        .step-description { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 24px; line-height: 1.5; }
+        .form-section { margin-bottom: 28px; }
+        .form-section-title { font-size: 0.875rem; font-weight: 600; color: var(--ms-blue); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--ms-blue-light); }
+        .form-group { margin-bottom: 20px; }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+        label { display: block; font-size: 0.875rem; font-weight: 500; color: var(--text-primary); margin-bottom: 6px; }
+        .label-with-info { display: flex; align-items: center; gap: 8px; }
+        .info-icon { width: 18px; height: 18px; border-radius: 50%; background: var(--ms-blue-light); color: var(--ms-blue); font-size: 0.7rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; cursor: help; position: relative; }
+        .info-icon:hover .tooltip { display: block; }
+        .tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--text-primary); color: white; padding: 12px 16px; border-radius: 8px; font-size: 0.8rem; font-weight: 400; width: 280px; z-index: 100; margin-bottom: 8px; line-height: 1.5; box-shadow: var(--shadow-lg); }
+        .tooltip::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--text-primary); }
+        input[type="number"], input[type="text"], select { width: 100%; padding: 12px 16px; font-size: 0.9rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-tertiary); color: var(--text-primary); transition: all 0.2s; }
+        input:focus, select:focus { outline: none; border-color: var(--ms-blue); box-shadow: 0 0 0 3px var(--ms-blue-light); }
+        input[type="number"] { -moz-appearance: textfield; }
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; }
+        .input-suffix { position: relative; }
+        .input-suffix input { padding-right: 60px; }
+        .input-suffix .suffix { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.8rem; }
+        .info-box { background: var(--ms-blue-light); border-left: 4px solid var(--ms-blue); padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+        .info-box.warning { background: #fff4ce; border-left-color: var(--ms-orange); }
+        .info-box.success { background: #dff6dd; border-left-color: var(--ms-green); }
+        .info-box-title { font-weight: 600; font-size: 0.875rem; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+        .info-box p { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
+        .agent-table-container { overflow-x: auto; margin: 20px 0; }
+        .agent-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .agent-table th { background: var(--bg-tertiary); padding: 12px 8px; text-align: left; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid var(--border-color); white-space: nowrap; }
+        .agent-table td { padding: 10px 8px; border-bottom: 1px solid var(--border-color); }
+        .agent-table input { padding: 8px 10px; font-size: 0.85rem; }
+        .agent-table .agent-name-input { min-width: 140px; }
+        .agent-table .small-input { width: 70px; text-align: center; }
+        .agent-table .result-cell { font-weight: 600; color: var(--ms-blue); text-align: right; }
+        .add-agent-btn { margin-top: 12px; padding: 10px 20px; background: var(--bg-tertiary); border: 2px dashed var(--border-color); border-radius: 8px; color: var(--text-secondary); font-size: 0.875rem; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; justify-content: center; width: 100%; }
+        .add-agent-btn:hover { border-color: var(--ms-blue); color: var(--ms-blue); background: var(--ms-blue-light); }
+        .remove-agent-btn { background: none; border: none; color: var(--ms-red); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; opacity: 0.6; transition: opacity 0.2s; }
+        .remove-agent-btn:hover { opacity: 1; }
+        .btn { padding: 12px 24px; font-size: 0.9rem; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+        .btn-primary { background: var(--ms-blue); color: white; }
+        .btn-primary:hover { background: var(--ms-blue-dark); }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); }
+        .btn-secondary:hover { background: var(--bg-primary); }
+        .btn-success { background: var(--ms-green); color: white; }
+        .btn-success:hover { background: #0b5c0b; }
+        .button-row { display: flex; justify-content: space-between; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-color); }
+        .summary-title { font-size: 1rem; font-weight: 600; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid var(--ms-blue); color: var(--text-primary); }
+        .summary-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-color); }
+        .summary-item:last-child { border-bottom: none; }
+        .summary-label { font-size: 0.85rem; color: var(--text-secondary); }
+        .summary-value { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+        .summary-total { background: linear-gradient(135deg, var(--ms-blue) 0%, var(--ms-purple) 100%); color: white; padding: 20px; border-radius: 10px; margin-top: 20px; text-align: center; }
+        .summary-total-label { font-size: 0.8rem; opacity: 0.9; margin-bottom: 4px; }
+        .summary-total-value { font-size: 2rem; font-weight: 700; }
+        .summary-total-sub { font-size: 0.85rem; opacity: 0.8; margin-top: 4px; }
+        .summary-breakdown { margin-top: 20px; }
+        .breakdown-title { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .breakdown-item { display: flex; justify-content: space-between; font-size: 0.8rem; padding: 6px 0; color: var(--text-secondary); }
+        .breakdown-item .value { font-weight: 500; color: var(--text-primary); }
+        .export-btn { width: 100%; margin-top: 20px; padding: 14px; justify-content: center; }
+        .result-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 24px 0; }
+        .result-card { background: var(--bg-tertiary); border-radius: 10px; padding: 20px; text-align: center; border: 1px solid var(--border-color); }
+        .result-card.highlight { background: linear-gradient(135deg, var(--ms-blue-light) 0%, #e8d4f8 100%); border-color: var(--ms-blue); }
+        .result-card-value { font-size: 1.75rem; font-weight: 700; color: var(--ms-blue); margin-bottom: 4px; }
+        .result-card-label { font-size: 0.8rem; color: var(--text-secondary); }
+        .comparison-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .comparison-table th { background: var(--ms-blue); color: white; padding: 14px; text-align: left; font-weight: 600; }
+        .comparison-table td { padding: 14px; border-bottom: 1px solid var(--border-color); }
+        .comparison-table tr:nth-child(even) { background: var(--bg-tertiary); }
+        .comparison-table .best { background: #dff6dd !important; }
+        .comparison-table .best td:first-child::after { content: ' ✓'; color: var(--ms-green); font-weight: 600; }
+        .radio-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+        .radio-card { padding: 16px; background: var(--bg-tertiary); border: 2px solid var(--border-color); border-radius: 10px; cursor: pointer; transition: all 0.2s; text-align: center; }
+        .radio-card:hover { border-color: var(--ms-blue); }
+        .radio-card.selected { border-color: var(--ms-blue); background: var(--ms-blue-light); }
+        .radio-card input { display: none; }
+        .radio-card-icon { font-size: 2rem; margin-bottom: 8px; }
+        .radio-card-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+        .radio-card-desc { font-size: 0.75rem; color: var(--text-secondary); }
+        .collapsible { margin: 16px 0; }
+        .collapsible-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+        .collapsible-header:hover { background: var(--bg-primary); }
+        .collapsible-header.open { border-radius: 8px 8px 0 0; }
+        .collapsible-title { font-weight: 600; font-size: 0.9rem; }
+        .collapsible-icon { transition: transform 0.2s; }
+        .collapsible-header.open .collapsible-icon { transform: rotate(180deg); }
+        .collapsible-content { display: none; padding: 20px; border: 1px solid var(--border-color); border-top: none; border-radius: 0 0 8px 8px; background: white; }
+        .collapsible-content.open { display: block; }
+        
+        /* Agent Cards */
+        .agent-card { background: var(--bg-tertiary); border: 2px solid var(--border-color); border-radius: 12px; padding: 20px; margin-bottom: 16px; transition: all 0.2s; }
+        .agent-card:hover { border-color: var(--ms-blue-light); box-shadow: var(--shadow); }
+        .agent-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color); }
+        .agent-card-title { display: flex; align-items: center; gap: 12px; flex: 1; }
+        .agent-card-title input { font-size: 1.1rem; font-weight: 600; border: none; background: transparent; padding: 4px 8px; border-radius: 4px; }
+        .agent-card-title input:focus { background: white; outline: 2px solid var(--ms-blue); }
+        .agent-card-summary { display: flex; gap: 16px; align-items: center; }
+        .agent-card-stat { text-align: center; padding: 8px 16px; background: var(--ms-blue-light); border-radius: 8px; }
+        .agent-card-stat-value { font-size: 1.2rem; font-weight: 700; color: var(--ms-blue); }
+        .agent-card-stat-label { font-size: 0.7rem; color: var(--text-secondary); }
+        .agent-card-body { display: grid; gap: 20px; }
+        .agent-section { background: white; border-radius: 8px; padding: 16px; }
+        .agent-section-title { font-size: 0.8rem; font-weight: 600; color: var(--ms-purple); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+        .agent-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+        .agent-field { display: flex; flex-direction: column; gap: 4px; }
+        .agent-field label { font-size: 0.75rem; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; }
+        .agent-field input { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; text-align: center; }
+        .agent-field input:focus { border-color: var(--ms-blue); outline: none; box-shadow: 0 0 0 2px var(--ms-blue-light); }
+        .credit-badge { display: inline-flex; align-items: center; justify-content: center; background: var(--ms-blue); color: white; font-size: 0.65rem; font-weight: 600; padding: 2px 6px; border-radius: 10px; margin-left: 4px; }
+        .credit-badge.free { background: var(--ms-green); }
+        .credit-badge.paid { background: var(--ms-orange); }
+        .action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+        .action-item { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; text-align: center; }
+        .action-item label { font-size: 0.75rem; color: var(--text-primary); display: block; margin-bottom: 6px; }
+        .action-item input { width: 60px; padding: 6px; text-align: center; border: 1px solid var(--border-color); border-radius: 4px; }
+        .remove-agent-btn { background: none; border: none; color: var(--ms-red); cursor: pointer; font-size: 1.5rem; padding: 4px 8px; opacity: 0.6; transition: opacity 0.2s; }
+        .remove-agent-btn:hover { opacity: 1; }
+        
+        @media (max-width: 900px) { .main-content { flex-direction: column; } .summary-section { position: static; } .header { flex-direction: column; text-align: center; } .header-left { flex-direction: column; } .progress-steps { flex-wrap: wrap; gap: 12px; } .progress-steps::before { display: none; } .form-row { grid-template-columns: 1fr; } .resource-bar { flex-direction: column; gap: 12px; } .resource-links, .scenario-presets { flex-wrap: wrap; justify-content: center; } .agent-card-header { flex-direction: column; gap: 12px; } .agent-card-summary { width: 100%; justify-content: center; } }
+        
+        /* Resource Bar */
+        .resource-bar { background: var(--bg-secondary); border-radius: 12px; padding: 16px 24px; margin-bottom: 16px; box-shadow: var(--shadow); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+        .resource-links, .scenario-presets { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .resource-links span, .scenario-presets span { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
+        .resource-links a { font-size: 0.8rem; color: var(--ms-blue); text-decoration: none; padding: 6px 12px; background: var(--ms-blue-light); border-radius: 6px; transition: all 0.2s; white-space: nowrap; }
+        .resource-links a:hover { background: var(--ms-blue); color: white; }
+        .preset-btn { padding: 6px 14px; font-size: 0.8rem; font-weight: 500; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .preset-btn:hover { background: var(--ms-purple); color: white; border-color: var(--ms-purple); }
+        
+        /* Warnings */
+        .warnings-container { margin-bottom: 16px; }
+        .warning-box { background: #fff4ce; border: 1px solid var(--ms-orange); border-left: 4px solid var(--ms-orange); border-radius: 8px; padding: 14px 20px; display: flex; flex-direction: column; gap: 8px; }
+        .warning-item { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: #6d5700; }
+        .warning-item .icon { font-size: 1.1rem; }
+        
+        /* Small Button */
+        .btn-sm { padding: 8px 14px; font-size: 0.8rem; }
+        
+        /* Footer */
+        .footer { background: var(--bg-secondary); border-radius: 12px; padding: 20px 32px; margin-top: 24px; box-shadow: var(--shadow); text-align: center; }
+        .footer-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+        .footer-left { text-align: left; }
+        .footer-disclaimer { font-size: 0.75rem; color: var(--text-muted); line-height: 1.5; max-width: 600px; }
+        .footer-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+        .footer-version { font-size: 0.8rem; font-weight: 600; color: var(--ms-blue); }
+        .footer-date { font-size: 0.7rem; color: var(--text-muted); }
+        @media (max-width: 600px) { .footer-content { flex-direction: column; text-align: center; } .footer-left, .footer-right { text-align: center; align-items: center; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">🤖</div>
+                <div>
+                    <h1 id="headerTitle"></h1>
+                    <p id="headerSubtitle"></p>
+                </div>
+            </div>
+            <div class="header-right">
+                <button class="btn btn-secondary btn-sm" onclick="resetCalculator()" title="Reset">🔄 Reset</button>
+                <div class="lang-toggle">
+                    <button class="lang-btn active" onclick="setLanguage('de')">DE</button>
+                    <button class="lang-btn" onclick="setLanguage('en')">EN</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Resource Links Bar -->
+        <div class="resource-bar">
+            <div class="resource-links">
+                <span id="resourcesLabel">📚 Ressourcen:</span>
+                <a href="https://www.microsoft.com/licensing/docs/view/Licensing-Guides" target="_blank" id="linkLicensingGuide">📄 Microsoft Licensing Guide</a>
+                <a href="https://microsoft.github.io/copilot-studio-estimator/" target="_blank" id="linkEstimator">🧮 MS Credit Estimator</a>
+                <a href="https://learn.microsoft.com/en-us/microsoft-copilot-studio/billing-and-licensing" target="_blank" id="linkDocs">📖 Microsoft Learn</a>
+            </div>
+            <div class="scenario-presets">
+                <span id="presetsLabel">⚡ Schnellstart:</span>
+                <button class="preset-btn" onclick="loadPreset('small')" id="presetSmall">Klein</button>
+                <button class="preset-btn" onclick="loadPreset('medium')" id="presetMedium">Mittelstand</button>
+                <button class="preset-btn" onclick="loadPreset('enterprise')" id="presetEnterprise">Enterprise</button>
+            </div>
+        </div>
+
+        <!-- Validation Warnings -->
+        <div class="warnings-container" id="warningsContainer" style="display: none;">
+            <div class="warning-box" id="warningBox"></div>
+        </div>
+
+        <div class="progress-container">
+            <div class="progress-steps">
+                <div class="progress-step active" data-step="1" onclick="goToStep(1)"><div class="step-circle">1</div><span class="step-label" id="stepLabel1"></span></div>
+                <div class="progress-step" data-step="2" onclick="goToStep(2)"><div class="step-circle">2</div><span class="step-label" id="stepLabel2"></span></div>
+                <div class="progress-step" data-step="3" onclick="goToStep(3)"><div class="step-circle">3</div><span class="step-label" id="stepLabel3"></span></div>
+                <div class="progress-step" data-step="4" onclick="goToStep(4)"><div class="step-circle">4</div><span class="step-label" id="stepLabel4"></span></div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="calculator-section">
+                <!-- Step 1 -->
+                <div class="step-content active" id="step1">
+                    <h2 class="step-title" id="step1Title"></h2>
+                    <p class="step-description" id="step1Desc"></p>
+                    <div class="form-section">
+                        <div class="form-section-title" id="existingLicensesTitle"></div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="label-with-info"><span id="totalUsersLabel"></span><span class="info-icon">?<span class="tooltip" id="totalUsersTooltip"></span></span></label>
+                                <input type="number" id="totalUsers" value="100" min="1" onchange="updateCalculations()">
+                            </div>
+                            <div class="form-group">
+                                <label class="label-with-info"><span id="m365CopilotLabel"></span><span class="info-icon">?<span class="tooltip" id="m365CopilotTooltip"></span></span></label>
+                                <input type="number" id="m365CopilotUsers" value="0" min="0" onchange="updateCalculations()">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="label-with-info"><span id="powerAppsLabel"></span><span class="info-icon">?<span class="tooltip" id="powerAppsTooltip"></span></span></label>
+                                <input type="number" id="powerAppsPremiumUsers" value="0" min="0" onchange="updateCalculations()">
+                            </div>
+                            <div class="form-group">
+                                <label class="label-with-info"><span id="m365TypeLabel"></span><span class="info-icon">?<span class="tooltip" id="m365TypeTooltip"></span></span></label>
+                                <select id="m365LicenseType" onchange="updateCalculations()">
+                                    <option value="none" id="optNoM365"></option>
+                                    <option value="e3" selected>Microsoft 365 E3</option>
+                                    <option value="e5">Microsoft 365 E5</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-box-title">💡 <span id="infoBoxTitle1"></span></div>
+                        <p id="infoBoxText1"></p>
+                    </div>
+                    <div class="form-section">
+                        <div class="form-section-title" id="licenseModelTitle"></div>
+                        <div class="radio-cards">
+                            <label class="radio-card selected" onclick="selectRadio(this, 'licenseModel', 'prepaid')">
+                                <input type="radio" name="licenseModel" value="prepaid" checked>
+                                <div class="radio-card-icon">📦</div>
+                                <div class="radio-card-title">Prepaid Packs</div>
+                                <div class="radio-card-desc" id="prepaidDesc"></div>
+                            </label>
+                            <label class="radio-card" onclick="selectRadio(this, 'licenseModel', 'payg')">
+                                <input type="radio" name="licenseModel" value="payg">
+                                <div class="radio-card-icon">💳</div>
+                                <div class="radio-card-title">Pay-As-You-Go</div>
+                                <div class="radio-card-desc" id="paygDesc"></div>
+                            </label>
+                            <label class="radio-card" onclick="selectRadio(this, 'licenseModel', 'hybrid')">
+                                <input type="radio" name="licenseModel" value="hybrid">
+                                <div class="radio-card-icon">🔄</div>
+                                <div class="radio-card-title">Hybrid</div>
+                                <div class="radio-card-desc" id="hybridDesc"></div>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="button-row">
+                        <div></div>
+                        <button class="btn btn-primary" onclick="nextStep()"><span id="btnNext1"></span> →</button>
+                    </div>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="step-content" id="step2">
+                    <h2 class="step-title" id="step2Title"></h2>
+                    <p class="step-description" id="step2Desc"></p>
+                    <div class="form-section">
+                        <div class="form-section-title" id="envConfigTitle"></div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="label-with-info"><span id="managedEnvsLabel"></span><span class="info-icon">?<span class="tooltip" id="managedEnvsTooltip"></span></span></label>
+                                <input type="number" id="managedEnvs" value="3" min="0" onchange="updateCalculations()">
+                            </div>
+                            <div class="form-group">
+                                <label class="label-with-info"><span id="unmanagedEnvsLabel"></span><span class="info-icon">?<span class="tooltip" id="unmanagedEnvsTooltip"></span></span></label>
+                                <input type="number" id="unmanagedEnvs" value="2" min="0" onchange="updateCalculations()">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="label-with-info"><span id="dbPerEnvLabel"></span><span class="info-icon">?<span class="tooltip" id="dbPerEnvTooltip"></span></span></label>
+                                <div class="input-suffix"><input type="number" id="dbPerEnv" value="1" min="0.1" step="0.1" onchange="updateCalculations()"><span class="suffix">GB</span></div>
+                            </div>
+                            <div class="form-group">
+                                <label class="label-with-info"><span id="filePerEnvLabel"></span><span class="info-icon">?<span class="tooltip" id="filePerEnvTooltip"></span></span></label>
+                                <div class="input-suffix"><input type="number" id="filePerEnv" value="2" min="0.1" step="0.1" onchange="updateCalculations()"><span class="suffix">GB</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="info-box warning">
+                        <div class="info-box-title">⚠️ <span id="infoBoxTitle2"></span></div>
+                        <p id="infoBoxText2"></p>
+                    </div>
+                    <div class="form-section" id="dataverseAnalysis">
+                        <div class="form-section-title" id="capacityAnalysisTitle"></div>
+                        <div class="result-cards">
+                            <div class="result-card"><div class="result-card-value" id="totalDbNeeded">3 GB</div><div class="result-card-label" id="dbNeededLabel"></div></div>
+                            <div class="result-card"><div class="result-card-value" id="totalDbAvailable">15 GB</div><div class="result-card-label" id="dbAvailableLabel"></div></div>
+                            <div class="result-card highlight" id="dbStatusCard"><div class="result-card-value" id="dbStatus">✓</div><div class="result-card-label" id="dbStatusLabel"></div></div>
+                        </div>
+                        <div id="capacityOptions" style="display: none;">
+                            <div class="form-section-title" id="additionalCapacityTitle"></div>
+                            <table class="comparison-table"><thead><tr><th id="optionTh"></th><th id="capacityTh"></th><th id="monthlyCostTh"></th></tr></thead><tbody id="capacityOptionsBody"></tbody></table>
+                        </div>
+                    </div>
+                    <div class="button-row">
+                        <button class="btn btn-secondary" onclick="prevStep()">← <span id="btnBack2"></span></button>
+                        <button class="btn btn-primary" onclick="nextStep()"><span id="btnNext2"></span> →</button>
+                    </div>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="step-content" id="step3">
+                    <h2 class="step-title" id="step3Title"></h2>
+                    <p class="step-description" id="step3Desc"></p>
+                    
+                    <div class="form-section">
+                        <div class="form-section-title" id="agentsConfigTitle"></div>
+                        <div id="agentCardsContainer"></div>
+                        <button class="add-agent-btn" onclick="addAgent()"><span>+</span> <span id="addAgentBtn"></span></button>
+                    </div>
+
+                    <div class="collapsible" style="margin-top: 24px;">
+                        <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                            <span class="collapsible-title" id="creditRatesTitle"></span>
+                            <span class="collapsible-icon">▼</span>
+                        </div>
+                        <div class="collapsible-content">
+                            <table class="comparison-table">
+                                <thead><tr><th id="thAnswerType"></th><th>Credits</th><th id="thDescription"></th><th>M365 Copilot</th></tr></thead>
+                                <tbody id="creditRatesBody"></tbody>
+                            </table>
+                            <div class="info-box success" style="margin-top: 16px;">
+                                <div class="info-box-title">✓ <span id="zeroRatedTitle"></span></div>
+                                <p id="zeroRatedText"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="button-row">
+                        <button class="btn btn-secondary" onclick="prevStep()">← <span id="btnBack3"></span></button>
+                        <button class="btn btn-primary" onclick="nextStep()"><span id="btnNext3"></span> →</button>
+                    </div>
+                </div>
+
+                <!-- Step 4 -->
+                <div class="step-content" id="step4">
+                    <h2 class="step-title" id="step4Title"></h2>
+                    <p class="step-description" id="step4Desc"></p>
+                    <div class="result-cards">
+                        <div class="result-card"><div class="result-card-value" id="resultTotalCredits">0</div><div class="result-card-label" id="resultCreditsLabel"></div></div>
+                        <div class="result-card"><div class="result-card-value" id="resultRecommendedPacks">0</div><div class="result-card-label" id="resultPacksLabel"></div></div>
+                        <div class="result-card highlight"><div class="result-card-value" id="resultMonthlyCost">$0</div><div class="result-card-label" id="resultMonthlyLabel"></div></div>
+                        <div class="result-card"><div class="result-card-value" id="resultYearlyCost">$0</div><div class="result-card-label" id="resultYearlyLabel"></div></div>
+                    </div>
+                    <div class="form-section">
+                        <div class="form-section-title" id="costBreakdownTitle"></div>
+                        <table class="comparison-table" id="costBreakdownTable">
+                            <thead><tr><th id="thCostCategory"></th><th id="thDetails"></th><th id="thMonthly"></th><th id="thYearly"></th></tr></thead>
+                            <tbody id="costBreakdownBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="form-section">
+                        <div class="form-section-title" id="recommendationsTitle"></div>
+                        <div id="recommendationsBox" class="info-box success">
+                            <div class="info-box-title">💡 <span id="optimizationTitle"></span></div>
+                            <p id="recommendationsText"></p>
+                        </div>
+                    </div>
+                    <div class="button-row">
+                        <button class="btn btn-secondary" onclick="prevStep()">← <span id="btnBack4"></span></button>
+                        <button class="btn btn-success export-btn" onclick="exportToExcel()">📥 <span id="exportBtn"></span></button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="summary-section">
+                <h3 class="summary-title" id="summaryTitle"></h3>
+                <div class="summary-item"><span class="summary-label" id="sumUsersLabel"></span><span class="summary-value" id="sumUsers">100</span></div>
+                <div class="summary-item"><span class="summary-label" id="sumM365Label"></span><span class="summary-value" id="sumM365Copilot">0</span></div>
+                <div class="summary-item"><span class="summary-label" id="sumEnvsLabel"></span><span class="summary-value" id="sumEnvironments">5</span></div>
+                <div class="summary-item"><span class="summary-label" id="sumAgentsLabel"></span><span class="summary-value" id="sumAgents">1</span></div>
+                <div class="summary-item"><span class="summary-label" id="sumCreditsLabel"></span><span class="summary-value" id="sumCredits">0</span></div>
+                <div class="summary-total">
+                    <div class="summary-total-label" id="estimatedCostLabel"></div>
+                    <div class="summary-total-value" id="sumTotalCost">$200</div>
+                    <div class="summary-total-sub" id="perMonthLabel"></div>
+                </div>
+                <div class="summary-breakdown">
+                    <div class="breakdown-title" id="breakdownTitle"></div>
+                    <div class="breakdown-item"><span id="breakdownCopilotLabel"></span><span class="value" id="breakdownCopilot">$200</span></div>
+                    <div class="breakdown-item"><span id="breakdownPowerAppsLabel"></span><span class="value" id="breakdownPowerApps">$0</span></div>
+                    <div class="breakdown-item"><span id="breakdownDataverseLabel"></span><span class="value" id="breakdownDataverse">$0</span></div>
+                    <div class="breakdown-item"><span id="breakdownPaygLabel"></span><span class="value" id="breakdownPayg">$0</span></div>
+                </div>
+                <button class="btn btn-success export-btn" onclick="exportToExcel()">📥 <span id="exportBtnSidebar"></span></button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-left">
+                    <p class="footer-disclaimer" id="footerDisclaimer"></p>
+                </div>
+                <div class="footer-right">
+                    <span class="footer-version">v1.2</span>
+                    <span class="footer-date" id="footerDate"></span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Complete translations
+        const i18n = {
+            de: {
+                // Header
+                headerTitle: "Microsoft Copilot Studio Cost Calculator",
+                headerSubtitle: "Power Platform Lizenz- und Kostenplanung",
+                // Progress Steps
+                stepLabel1: "Ausgangssituation",
+                stepLabel2: "Environment-Strategie", 
+                stepLabel3: "Agent-Konfiguration",
+                stepLabel4: "Ergebnis & Export",
+                // Step 1
+                step1Title: "Schritt 1: Ausgangssituation erfassen",
+                step1Desc: "Erfassen Sie die vorhandenen Microsoft-Lizenzen. Diese sind wichtig, da bestimmte Lizenzen bereits Copilot Studio Funktionen enthalten.",
+                existingLicensesTitle: "Vorhandene Lizenzen",
+                totalUsersLabel: "Gesamtanzahl Nutzer",
+                totalUsersTooltip: "Die Gesamtanzahl der Mitarbeiter, die mit Copilot Studio Agents interagieren werden.",
+                m365CopilotLabel: "Nutzer mit M365 Copilot Lizenz",
+                m365CopilotTooltip: "Nutzer mit M365 Copilot ($30/User/Mo) erhalten Classic, Generative, Graph Grounding und Actions KOSTENLOS in Teams/SharePoint.",
+                powerAppsLabel: "Power Apps Premium Nutzer",
+                powerAppsTooltip: "Power Apps Premium ($20/User/Mo) bringt Dataverse-Kapazität: Erste Lizenz +20 GB, jede weitere +250 MB.",
+                m365TypeLabel: "Microsoft 365 Lizenztyp",
+                m365TypeTooltip: "E3/E5 enthalten eingeschränkte Power Platform Rechte.",
+                optNoM365: "Keine M365 Lizenzen",
+                infoBoxTitle1: "M365 Copilot Vorteil",
+                infoBoxText1: "Nutzer mit M365 Copilot können Agents in Teams/SharePoint ohne Credits nutzen. Nur Autonomous Triggers kosten weiterhin.",
+                licenseModelTitle: "Copilot Studio Lizenzmodell",
+                prepaidDesc: "$200/Mo für 25.000 Credits",
+                paygDesc: "$0.01 pro Credit",
+                hybridDesc: "Packs + PAYG für Überschuss",
+                // Step 2
+                step2Title: "Schritt 2: Environment-Strategie",
+                step2Desc: "Definieren Sie Ihre Power Platform Environment-Strategie. Managed Environments bieten erweiterte Governance, benötigen aber Dataverse-Kapazität.",
+                envConfigTitle: "Environment Konfiguration",
+                managedEnvsLabel: "Managed Environments",
+                managedEnvsTooltip: "Managed Environments bieten erweiterte Admin-Features wie Sharing Limits und DLP Policies. Sie benötigen Dataverse.",
+                unmanagedEnvsLabel: "Standard Environments",
+                unmanagedEnvsTooltip: "Standard Environments ohne Managed Features. Können SharePoint Listen statt Dataverse nutzen.",
+                dbPerEnvLabel: "Geschätzter DB-Verbrauch pro Environment",
+                dbPerEnvTooltip: "Typisch: 0.5 GB klein, 1-2 GB mittel, 5+ GB komplex.",
+                filePerEnvLabel: "Geschätzter File-Verbrauch pro Environment",
+                filePerEnvTooltip: "Dataverse File Storage für Attachments, Dokumente etc. pro Environment.",
+                infoBoxTitle2: "Dataverse Kapazität",
+                infoBoxText2: "Copilot Studio bringt standardmäßig 15 GB Database, 20 GB File und 2 GB Log. Bei Mehrbedarf zeigen wir die günstigste Option.",
+                capacityAnalysisTitle: "Kapazitäts-Analyse",
+                dbNeededLabel: "Database benötigt",
+                dbAvailableLabel: "Database verfügbar",
+                capacityOk: "Kapazität OK",
+                additionalNeeded: "Zusätzlich benötigt",
+                additionalCapacityTitle: "Zusätzliche Kapazität benötigt",
+                optionTh: "Option",
+                capacityTh: "Kapazität",
+                monthlyCostTh: "Monatliche Kosten",
+                dataverseAddon: "Dataverse Database Add-On",
+                powerAppsLicenses: "Power Apps Premium Lizenzen",
+                // Step 3
+                step3Title: "Schritt 3: Agent-Konfiguration",
+                step3Desc: "Konfigurieren Sie Ihre Copilot Studio Agents mit Nutzerzahl, Sessions und Antworttypen-Mix.",
+                agentsConfigTitle: "Agents konfigurieren",
+                thAgentName: "Agent Name",
+                thUsers: "Nutzer",
+                thM365Cop: "M365 Cop.",
+                thSessions: "Sess./Mo",
+                thAutonomous: "Autonom.",
+                thCreditsSession: "Cr./Sess.",
+                thTotalCredits: "Total Cr.",
+                addAgentBtn: "Agent hinzufügen",
+                creditRatesTitle: "📊 Copilot Credit Rates (Referenz)",
+                thAnswerType: "Antworttyp",
+                thDescription: "Beschreibung",
+                classicDesc: "Vordefinierte FAQ-Antworten",
+                generativeDesc: "KI-generierte Antworten aus Wissensquellen",
+                graphDesc: "Zugriff auf SharePoint/M365-Daten",
+                actionsDesc: "Trigger, Topic-Wechsel, Tool-Aufrufe",
+                flowActionsDesc: "Pro 100 automatisierte Flow-Aktionen",
+                autonomousDesc: "Automatische Agent-Auslösung",
+                aiToolsHeader: "AI Tools & Content Processing",
+                aiBasicDesc: "Einfache KI-Aufgaben (Sentiment-Analyse)",
+                aiStandardDesc: "Mittlere KI-Aufgaben (Entity Extraction)",
+                aiPremiumDesc: "Reasoning-Modelle (Deep Reasoning)",
+                contentProcessingDesc: "Pro Seite (PDF-Extraktion etc.)",
+                zeroRatedTitle: "Zero-Rated für M365 Copilot Nutzer",
+                zeroRatedText: "Classic, Generative, Graph Grounding und Agent Actions sind für M365 Copilot Nutzer in Teams/SharePoint/Copilot Chat kostenlos.",
+                // Step 4
+                step4Title: "Schritt 4: Ergebnis & Export",
+                step4Desc: "Vollständige Kostenübersicht basierend auf Ihren Eingaben. Exportieren Sie das Ergebnis als Excel-Datei.",
+                resultCreditsLabel: "Credits / Monat",
+                resultPacksLabel: "Empfohlene Packs",
+                resultMonthlyLabel: "Gesamt / Monat",
+                resultYearlyLabel: "Gesamt / Jahr",
+                costBreakdownTitle: "Kostenaufschlüsselung",
+                thCostCategory: "Kostenkategorie",
+                thDetails: "Details",
+                thMonthly: "Monatlich",
+                thYearly: "Jährlich",
+                recommendationsTitle: "Empfehlungen",
+                optimizationTitle: "Optimierungstipps",
+                // Buttons
+                next: "Weiter",
+                back: "Zurück",
+                exportBtn: "Als Excel exportieren",
+                // Summary
+                summaryTitle: "📊 Live-Zusammenfassung",
+                sumUsersLabel: "Nutzer gesamt",
+                sumM365Label: "davon M365 Copilot",
+                sumEnvsLabel: "Environments",
+                sumAgentsLabel: "Agents",
+                sumCreditsLabel: "Credits / Monat",
+                estimatedCostLabel: "Geschätzte Kosten",
+                perMonthLabel: "pro Monat",
+                breakdownTitle: "Aufschlüsselung",
+                breakdownCopilotLabel: "Copilot Studio",
+                breakdownPowerAppsLabel: "Power Apps Premium",
+                breakdownDataverseLabel: "Dataverse Add-On",
+                breakdownPaygLabel: "PAYG Überschuss",
+                // Recommendations
+                recPrepaid: "Prepaid Packs sind bei Ihrem Verbrauch günstiger als Pay-As-You-Go.",
+                recPayg: "Bei niedrigem Verbrauch könnte Pay-As-You-Go flexibler sein.",
+                recM365Copilot: "Mehr M365 Copilot Lizenzen würden Credits sparen, da viele Funktionen dann kostenlos sind.",
+                recCapacityOk: "Ihre Dataverse-Kapazität ist ausreichend. Keine zusätzlichen Kosten nötig.",
+                // Cost breakdown
+                prepaidPacks: "Copilot Studio Prepaid Packs",
+                powerAppsPremium: "Power Apps Premium Lizenzen",
+                paygCredits: "Copilot Studio Pay-As-You-Go",
+                paygOverage: "PAYG Überschuss",
+                creditsOverPack: "Credits über Pack-Kapazität",
+                total: "GESAMT",
+                licenses: "Lizenzen",
+                // Resources & Presets
+                resourcesLabel: "📚 Ressourcen:",
+                linkLicensingGuide: "📄 Microsoft Licensing Guide",
+                linkEstimator: "🧮 MS Credit Estimator",
+                linkDocs: "📖 Microsoft Learn",
+                presetsLabel: "⚡ Schnellstart:",
+                presetSmall: "Klein",
+                presetMedium: "Mittelstand",
+                presetEnterprise: "Enterprise",
+                // Warnings
+                warningM365Exceeded: "M365 Copilot Nutzer können nicht höher sein als Gesamtnutzer!",
+                warningCapacity125: "Achtung: Bei >125% Credit-Auslastung werden Agents automatisch deaktiviert!",
+                warningAgentM365Exceeded: "Agent hat mehr M365 Copilot Nutzer als Gesamtnutzer!",
+                // Footer
+                footerDisclaimer: "Alle Preise und Credit-Raten basieren auf dem Microsoft Copilot Studio Licensing Guide (Februar 2026). Diese Kalkulation dient nur zur Schätzung. Verbindliche Preise erhalten Sie von Microsoft oder Ihrem Lizenzpartner.",
+                footerDate: "Stand: Februar 2026"
+            },
+            en: {
+                // Header
+                headerTitle: "Microsoft Copilot Studio Cost Calculator",
+                headerSubtitle: "Power Platform License & Cost Planning",
+                // Progress Steps
+                stepLabel1: "Baseline",
+                stepLabel2: "Environment Strategy",
+                stepLabel3: "Agent Configuration", 
+                stepLabel4: "Results & Export",
+                // Step 1
+                step1Title: "Step 1: Capture Baseline",
+                step1Desc: "Enter your existing Microsoft licenses. This is important as certain licenses already include Copilot Studio features.",
+                existingLicensesTitle: "Existing Licenses",
+                totalUsersLabel: "Total Users",
+                totalUsersTooltip: "The total number of employees who will interact with Copilot Studio Agents.",
+                m365CopilotLabel: "Users with M365 Copilot License",
+                m365CopilotTooltip: "Users with M365 Copilot ($30/User/Mo) get Classic, Generative, Graph Grounding and Actions FREE in Teams/SharePoint.",
+                powerAppsLabel: "Power Apps Premium Users",
+                powerAppsTooltip: "Power Apps Premium ($20/User/Mo) provides Dataverse capacity: First license +20 GB, each additional +250 MB.",
+                m365TypeLabel: "Microsoft 365 License Type",
+                m365TypeTooltip: "E3/E5 include limited Power Platform usage rights.",
+                optNoM365: "No M365 Licenses",
+                infoBoxTitle1: "M365 Copilot Advantage",
+                infoBoxText1: "Users with M365 Copilot can use Agents in Teams/SharePoint without credits. Only Autonomous Triggers still cost credits.",
+                licenseModelTitle: "Copilot Studio License Model",
+                prepaidDesc: "$200/Mo for 25,000 Credits",
+                paygDesc: "$0.01 per Credit",
+                hybridDesc: "Packs + PAYG for overage",
+                // Step 2
+                step2Title: "Step 2: Environment Strategy",
+                step2Desc: "Define your Power Platform environment strategy. Managed Environments offer enhanced governance but require Dataverse capacity.",
+                envConfigTitle: "Environment Configuration",
+                managedEnvsLabel: "Managed Environments",
+                managedEnvsTooltip: "Managed Environments offer advanced admin features like Sharing Limits and DLP Policies. They require Dataverse.",
+                unmanagedEnvsLabel: "Standard Environments",
+                unmanagedEnvsTooltip: "Standard environments without Managed features. Can use SharePoint lists instead of Dataverse.",
+                dbPerEnvLabel: "Estimated DB Usage per Environment",
+                dbPerEnvTooltip: "Typical: 0.5 GB small, 1-2 GB medium, 5+ GB complex.",
+                filePerEnvLabel: "Estimated File Usage per Environment",
+                filePerEnvTooltip: "Dataverse File Storage for attachments, documents etc. per environment.",
+                infoBoxTitle2: "Dataverse Capacity",
+                infoBoxText2: "Copilot Studio includes 15 GB Database, 20 GB File and 2 GB Log by default. If you need more, we'll show the cheapest option.",
+                capacityAnalysisTitle: "Capacity Analysis",
+                dbNeededLabel: "Database needed",
+                dbAvailableLabel: "Database available",
+                capacityOk: "Capacity OK",
+                additionalNeeded: "Additional needed",
+                additionalCapacityTitle: "Additional Capacity Required",
+                optionTh: "Option",
+                capacityTh: "Capacity",
+                monthlyCostTh: "Monthly Cost",
+                dataverseAddon: "Dataverse Database Add-On",
+                powerAppsLicenses: "Power Apps Premium Licenses",
+                // Step 3
+                step3Title: "Step 3: Agent Configuration",
+                step3Desc: "Configure your Copilot Studio Agents with user count, sessions and response type mix.",
+                agentsConfigTitle: "Configure Agents",
+                thAgentName: "Agent Name",
+                thUsers: "Users",
+                thM365Cop: "M365 Cop.",
+                thSessions: "Sess./Mo",
+                thAutonomous: "Autonom.",
+                thCreditsSession: "Cr./Sess.",
+                thTotalCredits: "Total Cr.",
+                addAgentBtn: "Add Agent",
+                creditRatesTitle: "📊 Copilot Credit Rates (Reference)",
+                thAnswerType: "Response Type",
+                thDescription: "Description",
+                classicDesc: "Predefined FAQ responses",
+                generativeDesc: "AI-generated answers from knowledge sources",
+                graphDesc: "Access to SharePoint/M365 data",
+                actionsDesc: "Triggers, topic changes, tool calls",
+                flowActionsDesc: "Per 100 automated flow actions",
+                autonomousDesc: "Automatic agent triggering",
+                aiToolsHeader: "AI Tools & Content Processing",
+                aiBasicDesc: "Simple AI tasks (sentiment analysis)",
+                aiStandardDesc: "Medium AI tasks (entity extraction)",
+                aiPremiumDesc: "Reasoning models (deep reasoning)",
+                contentProcessingDesc: "Per page (PDF extraction etc.)",
+                zeroRatedTitle: "Zero-Rated for M365 Copilot Users",
+                zeroRatedText: "Classic, Generative, Graph Grounding and Agent Actions are free for M365 Copilot users in Teams/SharePoint/Copilot Chat.",
+                // Step 4
+                step4Title: "Step 4: Results & Export",
+                step4Desc: "Complete cost overview based on your inputs. Export the results as an Excel file.",
+                resultCreditsLabel: "Credits / Month",
+                resultPacksLabel: "Recommended Packs",
+                resultMonthlyLabel: "Total / Month",
+                resultYearlyLabel: "Total / Year",
+                costBreakdownTitle: "Cost Breakdown",
+                thCostCategory: "Cost Category",
+                thDetails: "Details",
+                thMonthly: "Monthly",
+                thYearly: "Yearly",
+                recommendationsTitle: "Recommendations",
+                optimizationTitle: "Optimization Tips",
+                // Buttons
+                next: "Next",
+                back: "Back",
+                exportBtn: "Export as Excel",
+                // Summary
+                summaryTitle: "📊 Live Summary",
+                sumUsersLabel: "Total Users",
+                sumM365Label: "with M365 Copilot",
+                sumEnvsLabel: "Environments",
+                sumAgentsLabel: "Agents",
+                sumCreditsLabel: "Credits / Month",
+                estimatedCostLabel: "Estimated Cost",
+                perMonthLabel: "per month",
+                breakdownTitle: "Breakdown",
+                breakdownCopilotLabel: "Copilot Studio",
+                breakdownPowerAppsLabel: "Power Apps Premium",
+                breakdownDataverseLabel: "Dataverse Add-On",
+                breakdownPaygLabel: "PAYG Overage",
+                // Recommendations
+                recPrepaid: "Prepaid Packs are cheaper than Pay-As-You-Go at your consumption level.",
+                recPayg: "With low consumption, Pay-As-You-Go might be more flexible.",
+                recM365Copilot: "More M365 Copilot licenses would save credits since many features become free.",
+                recCapacityOk: "Your Dataverse capacity is sufficient. No additional costs required.",
+                // Cost breakdown
+                prepaidPacks: "Copilot Studio Prepaid Packs",
+                powerAppsPremium: "Power Apps Premium Licenses",
+                paygCredits: "Copilot Studio Pay-As-You-Go",
+                paygOverage: "PAYG Overage",
+                creditsOverPack: "Credits over pack capacity",
+                total: "TOTAL",
+                licenses: "Licenses",
+                // Resources & Presets
+                resourcesLabel: "📚 Resources:",
+                linkLicensingGuide: "📄 Microsoft Licensing Guide",
+                linkEstimator: "🧮 MS Credit Estimator",
+                linkDocs: "📖 Microsoft Learn",
+                presetsLabel: "⚡ Quick Start:",
+                presetSmall: "Small",
+                presetMedium: "Medium",
+                presetEnterprise: "Enterprise",
+                // Warnings
+                warningM365Exceeded: "M365 Copilot users cannot exceed total users!",
+                warningCapacity125: "Warning: Agents are automatically disabled at >125% credit utilization!",
+                warningAgentM365Exceeded: "Agent has more M365 Copilot users than total users!",
+                // Footer
+                footerDisclaimer: "All prices and credit rates are based on the Microsoft Copilot Studio Licensing Guide (February 2026). This calculation is for estimation purposes only. Binding prices are available from Microsoft or your license partner.",
+                footerDate: "As of: February 2026"
+            }
+        };
+
+        let currentLang = 'de';
+        let currentStep = 1;
+        let agents = [];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            addAgent();
+            applyTranslations();
+            updateCalculations();
+        });
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent === lang.toUpperCase());
+            });
+            applyTranslations();
+            renderAgentTable();
+            renderCreditRatesTable();
+            updateCalculations();
+        }
+
+        function t(key) { return i18n[currentLang][key] || key; }
+
+        function applyTranslations() {
+            const lang = i18n[currentLang];
+            // Set all text content by ID
+            Object.keys(lang).forEach(key => {
+                const el = document.getElementById(key);
+                if (el) el.textContent = lang[key];
+            });
+            // Set button texts
+            document.getElementById('btnNext1').textContent = t('next');
+            document.getElementById('btnNext2').textContent = t('next');
+            document.getElementById('btnNext3').textContent = t('next');
+            document.getElementById('btnBack2').textContent = t('back');
+            document.getElementById('btnBack3').textContent = t('back');
+            document.getElementById('btnBack4').textContent = t('back');
+            document.getElementById('exportBtnSidebar').textContent = t('exportBtn');
+            // Resource bar
+            document.getElementById('resourcesLabel').textContent = t('resourcesLabel');
+            document.getElementById('presetsLabel').textContent = t('presetsLabel');
+            document.getElementById('presetSmall').textContent = t('presetSmall');
+            document.getElementById('presetMedium').textContent = t('presetMedium');
+            document.getElementById('presetEnterprise').textContent = t('presetEnterprise');
+            // Footer
+            document.getElementById('footerDisclaimer').textContent = t('footerDisclaimer');
+            document.getElementById('footerDate').textContent = t('footerDate');
+            // Render dynamic tables
+            renderCreditRatesTable();
+        }
+
+        // Reset Calculator
+        function resetCalculator() {
+            if (!confirm(currentLang === 'de' ? 'Alle Eingaben zurücksetzen?' : 'Reset all inputs?')) return;
+            
+            document.getElementById('totalUsers').value = 100;
+            document.getElementById('m365CopilotUsers').value = 0;
+            document.getElementById('powerAppsPremiumUsers').value = 0;
+            document.getElementById('m365LicenseType').value = 'e3';
+            document.getElementById('managedEnvs').value = 3;
+            document.getElementById('unmanagedEnvs').value = 2;
+            document.getElementById('dbPerEnv').value = 1;
+            document.getElementById('filePerEnv').value = 2;
+            
+            // Reset license model
+            document.querySelectorAll('input[name="licenseModel"]').forEach(input => {
+                input.closest('.radio-card').classList.remove('selected');
+            });
+            document.querySelector('input[name="licenseModel"][value="prepaid"]').checked = true;
+            document.querySelector('input[name="licenseModel"][value="prepaid"]').closest('.radio-card').classList.add('selected');
+            
+            // Reset agents
+            agents = [];
+            addAgent();
+            
+            // Go to step 1
+            goToStep(1);
+            updateCalculations();
+        }
+
+        // Preset Scenarios
+        const presets = {
+            small: {
+                totalUsers: 50,
+                m365CopilotUsers: 10,
+                powerAppsPremiumUsers: 2,
+                managedEnvs: 1,
+                unmanagedEnvs: 1,
+                dbPerEnv: 0.5,
+                filePerEnv: 1,
+                agents: [
+                    { name: 'HR FAQ Bot', users: 50, m365Users: 10, sessions: 10, classic: 3, generative: 1, graph: 0, actions: 1, flowActions: 0, autonomous: 0, aiBasic: 0, aiStandard: 0, aiPremium: 0, contentProcessing: 0 }
+                ]
+            },
+            medium: {
+                totalUsers: 500,
+                m365CopilotUsers: 100,
+                powerAppsPremiumUsers: 20,
+                managedEnvs: 3,
+                unmanagedEnvs: 2,
+                dbPerEnv: 2,
+                filePerEnv: 3,
+                agents: [
+                    { name: 'IT Helpdesk', users: 500, m365Users: 100, sessions: 15, classic: 2, generative: 2, graph: 1, actions: 2, flowActions: 50, autonomous: 0, aiBasic: 0, aiStandard: 1, aiPremium: 0, contentProcessing: 0 },
+                    { name: 'HR Assistant', users: 500, m365Users: 100, sessions: 8, classic: 3, generative: 1, graph: 1, actions: 1, flowActions: 0, autonomous: 0, aiBasic: 0, aiStandard: 0, aiPremium: 0, contentProcessing: 2 },
+                    { name: 'Sales Support', users: 150, m365Users: 50, sessions: 20, classic: 1, generative: 3, graph: 2, actions: 2, flowActions: 100, autonomous: 1, aiBasic: 0, aiStandard: 0, aiPremium: 0, contentProcessing: 0 }
+                ]
+            },
+            enterprise: {
+                totalUsers: 5000,
+                m365CopilotUsers: 1500,
+                powerAppsPremiumUsers: 200,
+                managedEnvs: 8,
+                unmanagedEnvs: 4,
+                dbPerEnv: 5,
+                filePerEnv: 8,
+                agents: [
+                    { name: 'Global IT Support', users: 5000, m365Users: 1500, sessions: 12, classic: 2, generative: 2, graph: 2, actions: 2, flowActions: 200, autonomous: 0, aiBasic: 0, aiStandard: 1, aiPremium: 0, contentProcessing: 0 },
+                    { name: 'HR & Benefits', users: 5000, m365Users: 1500, sessions: 5, classic: 3, generative: 2, graph: 1, actions: 1, flowActions: 50, autonomous: 0, aiBasic: 0, aiStandard: 0, aiPremium: 0, contentProcessing: 3 },
+                    { name: 'Legal Assistant', users: 200, m365Users: 100, sessions: 25, classic: 1, generative: 4, graph: 3, actions: 2, flowActions: 0, autonomous: 1, aiBasic: 0, aiStandard: 2, aiPremium: 1, contentProcessing: 5 },
+                    { name: 'Finance Bot', users: 300, m365Users: 150, sessions: 18, classic: 2, generative: 2, graph: 2, actions: 3, flowActions: 150, autonomous: 1, aiBasic: 5, aiStandard: 0, aiPremium: 0, contentProcessing: 0 },
+                    { name: 'Customer Service', users: 500, m365Users: 100, sessions: 30, classic: 2, generative: 3, graph: 1, actions: 3, flowActions: 0, autonomous: 2, aiBasic: 0, aiStandard: 1, aiPremium: 0, contentProcessing: 0 }
+                ]
+            }
+        };
+
+        function loadPreset(presetName) {
+            const preset = presets[presetName];
+            if (!preset) return;
+            
+            document.getElementById('totalUsers').value = preset.totalUsers;
+            document.getElementById('m365CopilotUsers').value = preset.m365CopilotUsers;
+            document.getElementById('powerAppsPremiumUsers').value = preset.powerAppsPremiumUsers;
+            document.getElementById('managedEnvs').value = preset.managedEnvs;
+            document.getElementById('unmanagedEnvs').value = preset.unmanagedEnvs;
+            document.getElementById('dbPerEnv').value = preset.dbPerEnv;
+            document.getElementById('filePerEnv').value = preset.filePerEnv;
+            
+            // Load agents
+            agents = preset.agents.map((a, i) => ({
+                id: Date.now() + i,
+                ...a
+            }));
+            
+            renderAgentTable();
+            updateCalculations();
+            
+            // Flash effect on sidebar
+            const sidebar = document.querySelector('.summary-section');
+            sidebar.style.transition = 'box-shadow 0.3s';
+            sidebar.style.boxShadow = '0 0 0 3px var(--ms-purple), var(--shadow)';
+            setTimeout(() => { sidebar.style.boxShadow = 'var(--shadow)'; }, 800);
+        }
+
+        // Validation & Warnings
+        function checkValidation() {
+            const warnings = [];
+            const totalUsers = parseInt(document.getElementById('totalUsers').value) || 0;
+            const m365CopilotUsers = parseInt(document.getElementById('m365CopilotUsers').value) || 0;
+            
+            // Check M365 Copilot > Total Users
+            if (m365CopilotUsers > totalUsers) {
+                warnings.push({ icon: '⚠️', text: t('warningM365Exceeded') });
+            }
+            
+            // Check agent M365 users
+            agents.forEach(agent => {
+                if (agent.m365Users > agent.users) {
+                    warnings.push({ icon: '⚠️', text: `${agent.name}: ${t('warningAgentM365Exceeded')}` });
+                }
+            });
+            
+            // Check >125% capacity
+            const costs = calculateCosts();
+            if (costs.licenseModel === 'prepaid' || costs.licenseModel === 'hybrid') {
+                const packCapacity = costs.recommendedPacks * PRICING.creditsPerPack;
+                const utilization = (costs.totalCredits / packCapacity) * 100;
+                if (utilization > 125) {
+                    warnings.push({ icon: '🚨', text: t('warningCapacity125') });
+                }
+            }
+            
+            // Display warnings
+            const container = document.getElementById('warningsContainer');
+            const box = document.getElementById('warningBox');
+            
+            if (warnings.length > 0) {
+                container.style.display = 'block';
+                box.innerHTML = warnings.map(w => 
+                    `<div class="warning-item"><span class="icon">${w.icon}</span><span>${w.text}</span></div>`
+                ).join('');
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        function renderCreditRatesTable() {
+            const freeText = currentLang === 'de' ? '✓ Frei' : '✓ Free';
+            const paidText = currentLang === 'de' ? '⚠️ Berechnet' : '⚠️ Charged';
+            
+            document.getElementById('creditRatesBody').innerHTML = `
+                <tr><td>Classic Answers</td><td><strong>1</strong></td><td>${t('classicDesc')}</td><td style="color: var(--ms-green);">${freeText}</td></tr>
+                <tr><td>Generative Answers</td><td><strong>2</strong></td><td>${t('generativeDesc')}</td><td style="color: var(--ms-green);">${freeText}</td></tr>
+                <tr><td>Tenant Graph Grounding</td><td><strong>10</strong></td><td>${t('graphDesc')}</td><td style="color: var(--ms-green);">${freeText}</td></tr>
+                <tr><td>Agent Actions</td><td><strong>5</strong></td><td>${t('actionsDesc')}</td><td style="color: var(--ms-green);">${freeText}</td></tr>
+                <tr><td>Agent Flow Actions</td><td><strong>13/100</strong></td><td>${t('flowActionsDesc')}</td><td style="color: var(--ms-green);">${freeText}</td></tr>
+                <tr style="background: var(--bg-tertiary);"><td colspan="4" style="font-weight: 600; padding-top: 12px;">${t('aiToolsHeader')}</td></tr>
+                <tr><td>Autonomous Triggers</td><td><strong>25</strong></td><td>${t('autonomousDesc')}</td><td style="color: var(--ms-orange);">${paidText}</td></tr>
+                <tr><td>Text & Gen AI (Basic)</td><td><strong>0.1</strong></td><td>${t('aiBasicDesc')}</td><td style="color: var(--ms-orange);">${paidText}</td></tr>
+                <tr><td>Text & Gen AI (Standard)</td><td><strong>1</strong></td><td>${t('aiStandardDesc')}</td><td style="color: var(--ms-orange);">${paidText}</td></tr>
+                <tr><td>Text & Gen AI (Premium)</td><td><strong>10</strong></td><td>${t('aiPremiumDesc')}</td><td style="color: var(--ms-orange);">${paidText}</td></tr>
+                <tr><td>Content Processing</td><td><strong>8</strong></td><td>${t('contentProcessingDesc')}</td><td style="color: var(--ms-orange);">${paidText}</td></tr>
+            `;
+        }
+
+        // Navigation
+        function goToStep(stepNum) {
+            document.getElementById(`step${currentStep}`).classList.remove('active');
+            currentStep = stepNum;
+            document.getElementById(`step${currentStep}`).classList.add('active');
+            updateProgressBar();
+            updateCalculations();
+            
+            // Toggle stack layout for step 3 (agent table needs more width)
+            const mainContent = document.querySelector('.main-content');
+            if (stepNum === 3) {
+                mainContent.classList.add('stack-layout');
+            } else {
+                mainContent.classList.remove('stack-layout');
+            }
+        }
+
+        function nextStep() {
+            if (currentStep < 4) {
+                goToStep(currentStep + 1);
+            }
+        }
+
+        function prevStep() {
+            if (currentStep > 1) {
+                goToStep(currentStep - 1);
+            }
+        }
+
+        function updateProgressBar() {
+            document.querySelectorAll('.progress-step').forEach((step, index) => {
+                const stepNum = index + 1;
+                step.classList.remove('active', 'completed');
+                if (stepNum === currentStep) step.classList.add('active');
+                else if (stepNum < currentStep) step.classList.add('completed');
+            });
+        }
+
+        function selectRadio(element, name, value) {
+            document.querySelectorAll(`input[name="${name}"]`).forEach(input => {
+                input.closest('.radio-card').classList.remove('selected');
+            });
+            element.classList.add('selected');
+            element.querySelector('input').checked = true;
+            updateCalculations();
+        }
+
+        function toggleCollapsible(header) {
+            header.classList.toggle('open');
+            header.nextElementSibling.classList.toggle('open');
+        }
+
+        // Agent Management
+        function addAgent() {
+            const agentId = Date.now();
+            agents.push({ 
+                id: agentId, 
+                name: `Agent ${agents.length + 1}`, 
+                users: 30, 
+                m365Users: 5, 
+                sessions: 20, 
+                // Zero-rated for M365 Copilot users
+                classic: 2, 
+                generative: 2, 
+                graph: 1, 
+                actions: 1,
+                flowActions: 0,
+                // Always charged
+                autonomous: 0,
+                aiBasic: 0,
+                aiStandard: 0,
+                aiPremium: 0,
+                contentProcessing: 0
+            });
+            renderAgentCards();
+            updateCalculations();
+        }
+
+        function removeAgent(agentId) {
+            if (agents.length > 1) {
+                agents = agents.filter(a => a.id !== agentId);
+                renderAgentCards();
+                updateCalculations();
+            }
+        }
+
+        function updateAgentField(agentId, field, value) {
+            const agent = agents.find(a => a.id === agentId);
+            if (agent) {
+                agent[field] = field === 'name' ? value : parseFloat(value) || 0;
+                renderAgentCards();
+                updateCalculations();
+            }
+        }
+
+        function renderAgentCards() {
+            const container = document.getElementById('agentCardsContainer');
+            const freeLabel = currentLang === 'de' ? 'frei' : 'free';
+            
+            container.innerHTML = agents.map(agent => {
+                const creditsPerSession = calculateCreditsPerSession(agent);
+                const totalCredits = calculateAgentCredits(agent);
+                
+                return `
+                <div class="agent-card">
+                    <div class="agent-card-header">
+                        <div class="agent-card-title">
+                            <span style="font-size: 1.5rem;">🤖</span>
+                            <input type="text" value="${agent.name}" onchange="updateAgentField(${agent.id}, 'name', this.value)">
+                        </div>
+                        <div class="agent-card-summary">
+                            <div class="agent-card-stat">
+                                <div class="agent-card-stat-value">${creditsPerSession.toLocaleString()}</div>
+                                <div class="agent-card-stat-label">Credits/Session</div>
+                            </div>
+                            <div class="agent-card-stat">
+                                <div class="agent-card-stat-value">${totalCredits.toLocaleString()}</div>
+                                <div class="agent-card-stat-label">${currentLang === 'de' ? 'Credits/Monat' : 'Credits/Month'}</div>
+                            </div>
+                            <button class="remove-agent-btn" onclick="removeAgent(${agent.id})" ${agents.length === 1 ? 'disabled style="opacity:0.3"' : ''} title="${currentLang === 'de' ? 'Agent entfernen' : 'Remove agent'}">×</button>
+                        </div>
+                    </div>
+                    <div class="agent-card-body">
+                        <div class="agent-section">
+                            <div class="agent-section-title">${currentLang === 'de' ? '👥 Nutzung' : '👥 Usage'}</div>
+                            <div class="agent-fields">
+                                <div class="agent-field">
+                                    <label>${currentLang === 'de' ? 'Nutzer gesamt' : 'Total Users'}</label>
+                                    <input type="number" value="${agent.users}" min="1" onchange="updateAgentField(${agent.id}, 'users', this.value)">
+                                </div>
+                                <div class="agent-field">
+                                    <label>${currentLang === 'de' ? 'davon M365 Copilot' : 'with M365 Copilot'}</label>
+                                    <input type="number" value="${agent.m365Users}" min="0" onchange="updateAgentField(${agent.id}, 'm365Users', this.value)">
+                                </div>
+                                <div class="agent-field">
+                                    <label>${currentLang === 'de' ? 'Sessions/Nutzer/Mo' : 'Sessions/User/Mo'}</label>
+                                    <input type="number" value="${agent.sessions}" min="1" onchange="updateAgentField(${agent.id}, 'sessions', this.value)">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="agent-section">
+                            <div class="agent-section-title">${currentLang === 'de' ? '✨ Antworttypen pro Session (M365 Copilot = kostenlos)' : '✨ Response Types per Session (M365 Copilot = free)'}</div>
+                            <div class="action-grid">
+                                <div class="action-item">
+                                    <label>Classic <span class="credit-badge free">1 Cr.</span></label>
+                                    <input type="number" value="${agent.classic}" min="0" onchange="updateAgentField(${agent.id}, 'classic', this.value)">
+                                </div>
+                                <div class="action-item">
+                                    <label>Generative <span class="credit-badge free">2 Cr.</span></label>
+                                    <input type="number" value="${agent.generative}" min="0" onchange="updateAgentField(${agent.id}, 'generative', this.value)">
+                                </div>
+                                <div class="action-item">
+                                    <label>Graph <span class="credit-badge free">10 Cr.</span></label>
+                                    <input type="number" value="${agent.graph}" min="0" onchange="updateAgentField(${agent.id}, 'graph', this.value)">
+                                </div>
+                                <div class="action-item">
+                                    <label>Actions <span class="credit-badge free">5 Cr.</span></label>
+                                    <input type="number" value="${agent.actions}" min="0" onchange="updateAgentField(${agent.id}, 'actions', this.value)">
+                                </div>
+                                <div class="action-item">
+                                    <label>Flow (×100) <span class="credit-badge free">13 Cr.</span></label>
+                                    <input type="number" value="${agent.flowActions}" min="0" step="1" onchange="updateAgentField(${agent.id}, 'flowActions', this.value)" title="${currentLang === 'de' ? 'Anzahl Flow-Aktionen (13 Credits pro 100)' : 'Number of flow actions (13 credits per 100)'}">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="agent-section">
+                            <div class="agent-section-title">${currentLang === 'de' ? '⚡ Kostenpflichtige Aktionen (immer berechnet)' : '⚡ Charged Actions (always billed)'}</div>
+                            <div class="action-grid">
+                                <div class="action-item">
+                                    <label>Autonomous <span class="credit-badge paid">25 Cr.</span></label>
+                                    <input type="number" value="${agent.autonomous}" min="0" onchange="updateAgentField(${agent.id}, 'autonomous', this.value)">
+                                </div>
+                                <div class="action-item">
+                                    <label>AI Basic <span class="credit-badge paid">0.1 Cr.</span></label>
+                                    <input type="number" value="${agent.aiBasic}" min="0" onchange="updateAgentField(${agent.id}, 'aiBasic', this.value)">
+                                </div>
+                                <div class="action-item">
+                                    <label>AI Standard <span class="credit-badge paid">1 Cr.</span></label>
+                                    <input type="number" value="${agent.aiStandard}" min="0" onchange="updateAgentField(${agent.id}, 'aiStandard', this.value)">
+                                </div>
+                                <div class="action-item">
+                                    <label>AI Premium <span class="credit-badge paid">10 Cr.</span></label>
+                                    <input type="number" value="${agent.aiPremium}" min="0" onchange="updateAgentField(${agent.id}, 'aiPremium', this.value)">
+                                </div>
+                                <div class="action-item">
+                                    <label>${currentLang === 'de' ? 'Content/Seiten' : 'Content/Pages'} <span class="credit-badge paid">8 Cr.</span></label>
+                                    <input type="number" value="${agent.contentProcessing}" min="0" onchange="updateAgentField(${agent.id}, 'contentProcessing', this.value)">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+            
+            document.getElementById('addAgentBtn').textContent = t('addAgentBtn');
+        }
+
+        // Keep old function for compatibility but redirect to new one
+        function renderAgentTable() {
+            renderAgentCards();
+        }
+
+        // Calculations
+        const PRICING = {
+            prepaidPackPrice: 200, creditsPerPack: 25000, paygPricePerCredit: 0.01,
+            dataverseDbPerGb: 40, dataverseFilePerGb: 2, powerAppsPremium: 20,
+            defaultDbCapacity: 15, defaultFileCapacity: 20,
+            powerAppsFirstDbCapacity: 20, powerAppsAdditionalDbCapacity: 0.25,
+            powerAppsFirstFileCapacity: 20, powerAppsAdditionalFileCapacity: 2
+        };
+
+        // Credit rates - separated by M365 Copilot zero-rating
+        const CREDIT_RATES_FREE_FOR_M365 = {
+            classic: 1,
+            generative: 2,
+            graph: 10,
+            actions: 5,
+            flowActions: 0.13  // 13 per 100
+        };
+        
+        const CREDIT_RATES_ALWAYS_CHARGED = {
+            autonomous: 25,
+            aiBasic: 0.1,
+            aiStandard: 1,
+            aiPremium: 10,
+            contentProcessing: 8
+        };
+
+        function calculateCreditsPerSession(agent) {
+            // Free credits (for M365 Copilot users these are 0, for others they count)
+            const freeCredits = 
+                (agent.classic * CREDIT_RATES_FREE_FOR_M365.classic) + 
+                (agent.generative * CREDIT_RATES_FREE_FOR_M365.generative) + 
+                (agent.graph * CREDIT_RATES_FREE_FOR_M365.graph) + 
+                (agent.actions * CREDIT_RATES_FREE_FOR_M365.actions) +
+                (agent.flowActions * CREDIT_RATES_FREE_FOR_M365.flowActions);
+            
+            // Always charged credits
+            const chargedCredits = 
+                (agent.autonomous * CREDIT_RATES_ALWAYS_CHARGED.autonomous) +
+                (agent.aiBasic * CREDIT_RATES_ALWAYS_CHARGED.aiBasic) +
+                (agent.aiStandard * CREDIT_RATES_ALWAYS_CHARGED.aiStandard) +
+                (agent.aiPremium * CREDIT_RATES_ALWAYS_CHARGED.aiPremium) +
+                (agent.contentProcessing * CREDIT_RATES_ALWAYS_CHARGED.contentProcessing);
+            
+            return freeCredits + chargedCredits;
+        }
+
+        function calculateAgentCredits(agent) {
+            const totalSessions = agent.users * agent.sessions;
+            const m365Sessions = Math.min(agent.m365Users, agent.users) * agent.sessions;
+            const nonM365Sessions = totalSessions - m365Sessions;
+            
+            // Calculate free credits (0 for M365, full for others)
+            const freeCreditsPerSession = 
+                (agent.classic * CREDIT_RATES_FREE_FOR_M365.classic) + 
+                (agent.generative * CREDIT_RATES_FREE_FOR_M365.generative) + 
+                (agent.graph * CREDIT_RATES_FREE_FOR_M365.graph) + 
+                (agent.actions * CREDIT_RATES_FREE_FOR_M365.actions) +
+                (agent.flowActions * CREDIT_RATES_FREE_FOR_M365.flowActions);
+            
+            // Calculate always-charged credits
+            const chargedCreditsPerSession = 
+                (agent.autonomous * CREDIT_RATES_ALWAYS_CHARGED.autonomous) +
+                (agent.aiBasic * CREDIT_RATES_ALWAYS_CHARGED.aiBasic) +
+                (agent.aiStandard * CREDIT_RATES_ALWAYS_CHARGED.aiStandard) +
+                (agent.aiPremium * CREDIT_RATES_ALWAYS_CHARGED.aiPremium) +
+                (agent.contentProcessing * CREDIT_RATES_ALWAYS_CHARGED.contentProcessing);
+            
+            // M365 users only pay for charged actions
+            const m365Credits = m365Sessions * chargedCreditsPerSession;
+            
+            // Non-M365 users pay for everything
+            const nonM365Credits = nonM365Sessions * (freeCreditsPerSession + chargedCreditsPerSession);
+            
+            return m365Credits + nonM365Credits;
+        }
+
+        function calculateTotalCredits() { return agents.reduce((sum, agent) => sum + calculateAgentCredits(agent), 0); }
+
+        function calculateDataverseNeeds() {
+            const managedEnvs = parseInt(document.getElementById('managedEnvs').value) || 0;
+            const dbPerEnv = parseFloat(document.getElementById('dbPerEnv').value) || 0;
+            const filePerEnv = parseFloat(document.getElementById('filePerEnv').value) || 0;
+            const powerAppsUsers = parseInt(document.getElementById('powerAppsPremiumUsers').value) || 0;
+            const dbNeeded = managedEnvs * dbPerEnv;
+            const fileNeeded = managedEnvs * filePerEnv;
+            let dbAvailable = PRICING.defaultDbCapacity;
+            let fileAvailable = PRICING.defaultFileCapacity;
+            if (powerAppsUsers > 0) {
+                dbAvailable = Math.max(dbAvailable, PRICING.powerAppsFirstDbCapacity);
+                fileAvailable = Math.max(fileAvailable, PRICING.powerAppsFirstFileCapacity);
+                if (powerAppsUsers > 1) {
+                    dbAvailable += (powerAppsUsers - 1) * PRICING.powerAppsAdditionalDbCapacity;
+                    fileAvailable += (powerAppsUsers - 1) * PRICING.powerAppsAdditionalFileCapacity;
+                }
+            }
+            return { dbNeeded, fileNeeded, dbAvailable, fileAvailable, dbShortfall: Math.max(0, dbNeeded - dbAvailable), fileShortfall: Math.max(0, fileNeeded - fileAvailable) };
+        }
+
+        function calculateCapacityOptions(shortfall) {
+            const options = [];
+            if (shortfall.dbShortfall > 0 || shortfall.fileShortfall > 0) {
+                const dbAddOnCost = Math.ceil(shortfall.dbShortfall) * PRICING.dataverseDbPerGb;
+                const fileAddOnCost = Math.ceil(shortfall.fileShortfall) * PRICING.dataverseFilePerGb;
+                options.push({ name: t('dataverseAddon'), dbCapacity: `+${Math.ceil(shortfall.dbShortfall)} GB`, fileCapacity: `+${Math.ceil(shortfall.fileShortfall)} GB`, cost: dbAddOnCost + fileAddOnCost, type: 'addon' });
+                const existingPowerApps = parseInt(document.getElementById('powerAppsPremiumUsers').value) || 0;
+                let licensesNeeded = 0, dbFromLicenses = 0;
+                if (shortfall.dbShortfall > 0) {
+                    if (existingPowerApps === 0) { licensesNeeded = 1; dbFromLicenses = PRICING.powerAppsFirstDbCapacity; }
+                    if (dbFromLicenses < shortfall.dbShortfall) { licensesNeeded += Math.ceil((shortfall.dbShortfall - dbFromLicenses) / PRICING.powerAppsAdditionalDbCapacity); }
+                }
+                if (licensesNeeded > 0) options.push({ name: t('powerAppsLicenses'), dbCapacity: `${licensesNeeded} ${t('licenses')}`, fileCapacity: '–', cost: licensesNeeded * PRICING.powerAppsPremium, type: 'powerApps', licensesNeeded });
+            }
+            options.sort((a, b) => a.cost - b.cost);
+            if (options.length > 0) options[0].isBest = true;
+            return options;
+        }
+
+        function calculateCosts() {
+            const totalCredits = calculateTotalCredits();
+            const licenseModel = document.querySelector('input[name="licenseModel"]:checked')?.value || 'prepaid';
+            const dataverseNeeds = calculateDataverseNeeds();
+            const capacityOptions = calculateCapacityOptions(dataverseNeeds);
+            let copilotStudioCost = 0, paygOverage = 0, recommendedPacks = 0;
+            if (licenseModel === 'prepaid' || licenseModel === 'hybrid') {
+                recommendedPacks = Math.max(1, Math.ceil(totalCredits / PRICING.creditsPerPack));
+                const includedCredits = recommendedPacks * PRICING.creditsPerPack;
+                copilotStudioCost = recommendedPacks * PRICING.prepaidPackPrice;
+                if (licenseModel === 'hybrid' && totalCredits > includedCredits) paygOverage = (totalCredits - includedCredits) * PRICING.paygPricePerCredit;
+            } else { copilotStudioCost = totalCredits * PRICING.paygPricePerCredit; }
+            
+            // Dataverse Add-On cost (if capacity exceeded)
+            let dataverseCost = capacityOptions.length > 0 ? capacityOptions[0].cost : 0;
+            
+            // Power Apps Premium license costs (existing users)
+            const powerAppsUsers = parseInt(document.getElementById('powerAppsPremiumUsers').value) || 0;
+            const powerAppsCost = powerAppsUsers * PRICING.powerAppsPremium;
+            
+            const totalMonthly = copilotStudioCost + dataverseCost + paygOverage + powerAppsCost;
+            return { 
+                totalCredits, recommendedPacks, copilotStudioCost, dataverseCost, paygOverage, 
+                powerAppsCost, powerAppsUsers,
+                totalMonthly, totalYearly: totalMonthly * 12, 
+                dataverseNeeds, capacityOptions, licenseModel 
+            };
+        }
+
+        function updateCalculations() {
+            const costs = calculateCosts();
+            // Summary
+            document.getElementById('sumUsers').textContent = document.getElementById('totalUsers').value;
+            document.getElementById('sumM365Copilot').textContent = document.getElementById('m365CopilotUsers').value;
+            document.getElementById('sumEnvironments').textContent = (parseInt(document.getElementById('managedEnvs').value) || 0) + (parseInt(document.getElementById('unmanagedEnvs').value) || 0);
+            document.getElementById('sumAgents').textContent = agents.length;
+            document.getElementById('sumCredits').textContent = costs.totalCredits.toLocaleString();
+            document.getElementById('sumTotalCost').textContent = `$${costs.totalMonthly.toLocaleString()}`;
+            document.getElementById('breakdownCopilot').textContent = `$${costs.copilotStudioCost.toLocaleString()}`;
+            document.getElementById('breakdownPowerApps').textContent = `$${costs.powerAppsCost.toLocaleString()}`;
+            document.getElementById('breakdownDataverse').textContent = `$${costs.dataverseCost.toLocaleString()}`;
+            document.getElementById('breakdownPayg').textContent = `$${costs.paygOverage.toLocaleString()}`;
+            // Dataverse
+            document.getElementById('totalDbNeeded').textContent = `${costs.dataverseNeeds.dbNeeded.toFixed(1)} GB`;
+            document.getElementById('totalDbAvailable').textContent = `${costs.dataverseNeeds.dbAvailable.toFixed(1)} GB`;
+            const dbStatusCard = document.getElementById('dbStatusCard');
+            if (costs.dataverseNeeds.dbShortfall > 0) {
+                dbStatusCard.classList.remove('highlight'); dbStatusCard.style.background = '#fff4ce';
+                document.getElementById('dbStatus').textContent = `+${costs.dataverseNeeds.dbShortfall.toFixed(1)} GB`;
+                document.getElementById('dbStatusLabel').textContent = t('additionalNeeded');
+            } else {
+                dbStatusCard.classList.add('highlight'); dbStatusCard.style.background = '';
+                document.getElementById('dbStatus').textContent = '✓';
+                document.getElementById('dbStatusLabel').textContent = t('capacityOk');
+            }
+            const capacityOptionsDiv = document.getElementById('capacityOptions');
+            if (costs.capacityOptions.length > 0) {
+                capacityOptionsDiv.style.display = 'block';
+                document.getElementById('capacityOptionsBody').innerHTML = costs.capacityOptions.map(opt => `<tr class="${opt.isBest ? 'best' : ''}"><td>${opt.name}</td><td>${opt.dbCapacity} DB, ${opt.fileCapacity} File</td><td><strong>$${opt.cost.toLocaleString()}/mo</strong></td></tr>`).join('');
+            } else { capacityOptionsDiv.style.display = 'none'; }
+            renderAgentTable();
+            // Results
+            document.getElementById('resultTotalCredits').textContent = costs.totalCredits.toLocaleString();
+            document.getElementById('resultRecommendedPacks').textContent = costs.recommendedPacks;
+            document.getElementById('resultMonthlyCost').textContent = `$${costs.totalMonthly.toLocaleString()}`;
+            document.getElementById('resultYearlyCost').textContent = `$${costs.totalYearly.toLocaleString()}`;
+            // Breakdown
+            let breakdownRows = [];
+            if (costs.licenseModel === 'prepaid' || costs.licenseModel === 'hybrid') {
+                breakdownRows.push({ category: t('prepaidPacks'), details: `${costs.recommendedPacks} Pack(s) × $${PRICING.prepaidPackPrice}`, monthly: costs.copilotStudioCost, yearly: costs.copilotStudioCost * 12 });
+            } else {
+                breakdownRows.push({ category: t('paygCredits'), details: `${costs.totalCredits.toLocaleString()} Credits × $${PRICING.paygPricePerCredit}`, monthly: costs.copilotStudioCost, yearly: costs.copilotStudioCost * 12 });
+            }
+            if (costs.powerAppsCost > 0) breakdownRows.push({ category: t('powerAppsPremium'), details: `${costs.powerAppsUsers} × $${PRICING.powerAppsPremium}/Mo`, monthly: costs.powerAppsCost, yearly: costs.powerAppsCost * 12 });
+            if (costs.paygOverage > 0) breakdownRows.push({ category: t('paygOverage'), details: t('creditsOverPack'), monthly: costs.paygOverage, yearly: costs.paygOverage * 12 });
+            if (costs.dataverseCost > 0) { const best = costs.capacityOptions.find(o => o.isBest); breakdownRows.push({ category: best?.name || 'Dataverse', details: best ? best.dbCapacity : '', monthly: costs.dataverseCost, yearly: costs.dataverseCost * 12 }); }
+            breakdownRows.push({ category: `<strong>${t('total')}</strong>`, details: '', monthly: costs.totalMonthly, yearly: costs.totalYearly, isTotal: true });
+            document.getElementById('costBreakdownBody').innerHTML = breakdownRows.map(row => `<tr style="${row.isTotal ? 'background: var(--ms-blue-light); font-weight: 600;' : ''}"><td>${row.category}</td><td>${row.details}</td><td>$${row.monthly.toLocaleString()}</td><td>$${row.yearly.toLocaleString()}</td></tr>`).join('');
+            updateRecommendations(costs);
+            checkValidation();
+        }
+
+        function updateRecommendations(costs) {
+            const recs = [];
+            const m365 = parseInt(document.getElementById('m365CopilotUsers').value) || 0;
+            const total = parseInt(document.getElementById('totalUsers').value) || 1;
+            const paygCost = costs.totalCredits * PRICING.paygPricePerCredit;
+            if (costs.copilotStudioCost < paygCost && costs.licenseModel !== 'payg') recs.push(t('recPrepaid'));
+            else if (costs.totalCredits < 15000) recs.push(t('recPayg'));
+            if (m365 < total * 0.3) recs.push(t('recM365Copilot'));
+            if (costs.dataverseNeeds.dbShortfall <= 0) recs.push(t('recCapacityOk'));
+            document.getElementById('recommendationsText').innerHTML = recs.map(r => `• ${r}`).join('<br>');
+        }
+
+        // Professional Excel Export with ExcelJS
+        async function exportToExcel() {
+            const costs = calculateCosts();
+            const workbook = new ExcelJS.Workbook();
+            workbook.creator = 'Copilot Studio Calculator';
+            workbook.created = new Date();
+            
+            // Color palette (Microsoft theme)
+            const colors = {
+                blue: '0078D4',
+                blueDark: '106EBE',
+                blueLight: 'DEECF9',
+                purple: '5C2D91',
+                purpleLight: 'E8D4F8',
+                green: '107C10',
+                greenLight: 'DFF6DD',
+                orange: 'FF8C00',
+                orangeLight: 'FFF4CE',
+                red: 'D13438',
+                gray: 'F3F2F1',
+                grayDark: '605E5C',
+                white: 'FFFFFF',
+                black: '323130'
+            };
+
+            // ==================== SHEET 1: Executive Summary ====================
+            const ws1 = workbook.addWorksheet(currentLang === 'de' ? 'Zusammenfassung' : 'Executive Summary', {
+                properties: { tabColor: { argb: colors.blue } }
+            });
+            
+            // Set column widths
+            ws1.columns = [
+                { width: 5 }, { width: 35 }, { width: 20 }, { width: 20 }, { width: 5 }
+            ];
+
+            // Title section
+            ws1.mergeCells('B2:D2');
+            const titleCell = ws1.getCell('B2');
+            titleCell.value = '🤖 MICROSOFT COPILOT STUDIO';
+            titleCell.font = { name: 'Segoe UI', size: 22, bold: true, color: { argb: colors.white } };
+            titleCell.fill = { type: 'gradient', gradient: 'angle', degree: 90, stops: [
+                { position: 0, color: { argb: colors.blue } },
+                { position: 1, color: { argb: colors.purple } }
+            ]};
+            titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+            ws1.getRow(2).height = 40;
+
+            ws1.mergeCells('B3:D3');
+            const subtitleCell = ws1.getCell('B3');
+            subtitleCell.value = currentLang === 'de' ? 'Kostenkalkulationsreport' : 'Cost Calculation Report';
+            subtitleCell.font = { name: 'Segoe UI', size: 14, color: { argb: colors.white } };
+            subtitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.purple } };
+            subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+            ws1.getRow(3).height = 28;
+
+            const today = new Date();
+            const dateStr = today.toLocaleDateString(currentLang === 'de' ? 'de-DE' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            ws1.mergeCells('B4:D4');
+            const dateCell = ws1.getCell('B4');
+            dateCell.value = dateStr;
+            dateCell.font = { name: 'Segoe UI', size: 11, italic: true, color: { argb: colors.grayDark } };
+            dateCell.alignment = { horizontal: 'center' };
+
+            // Helper function for section headers
+            function addSectionHeader(ws, row, text) {
+                ws.mergeCells(`B${row}:D${row}`);
+                const cell = ws.getCell(`B${row}`);
+                cell.value = text;
+                cell.font = { name: 'Segoe UI', size: 13, bold: true, color: { argb: colors.white } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.blue } };
+                cell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+                ws.getRow(row).height = 28;
+            }
+
+            // Helper function for data rows
+            function addDataRow(ws, row, label, value, isHighlight = false, isCurrency = false) {
+                const labelCell = ws.getCell(`B${row}`);
+                labelCell.value = label;
+                labelCell.font = { name: 'Segoe UI', size: 11, color: { argb: colors.black } };
+                labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isHighlight ? colors.blueLight : colors.gray } };
+                labelCell.border = { bottom: { style: 'thin', color: { argb: 'DDDDDD' } } };
+
+                const valueCell = ws.getCell(`C${row}`);
+                valueCell.value = value;
+                valueCell.font = { name: 'Segoe UI', size: 11, bold: isHighlight, color: { argb: isHighlight ? colors.blue : colors.black } };
+                valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isHighlight ? colors.blueLight : colors.white } };
+                valueCell.alignment = { horizontal: 'right' };
+                valueCell.border = { bottom: { style: 'thin', color: { argb: 'DDDDDD' } } };
+                if (isCurrency) valueCell.numFmt = '"$"#,##0.00';
+            }
+
+            // Executive Summary Section
+            addSectionHeader(ws1, 6, currentLang === 'de' ? '📊 ÜBERSICHT' : '📊 OVERVIEW');
+            
+            addDataRow(ws1, 8, currentLang === 'de' ? 'Gesamtnutzer' : 'Total Users', parseInt(document.getElementById('totalUsers').value));
+            addDataRow(ws1, 9, currentLang === 'de' ? 'M365 Copilot Nutzer' : 'M365 Copilot Users', parseInt(document.getElementById('m365CopilotUsers').value));
+            addDataRow(ws1, 10, currentLang === 'de' ? 'Power Apps Premium' : 'Power Apps Premium', parseInt(document.getElementById('powerAppsPremiumUsers').value));
+            addDataRow(ws1, 11, currentLang === 'de' ? 'Environments' : 'Environments', (parseInt(document.getElementById('managedEnvs').value) || 0) + (parseInt(document.getElementById('unmanagedEnvs').value) || 0));
+            addDataRow(ws1, 12, currentLang === 'de' ? 'Anzahl Agents' : 'Number of Agents', agents.length);
+
+            // Credits Section
+            addSectionHeader(ws1, 14, currentLang === 'de' ? '⚡ CREDITS' : '⚡ CREDITS');
+            
+            addDataRow(ws1, 16, currentLang === 'de' ? 'Credits pro Monat' : 'Credits per Month', costs.totalCredits, true);
+            addDataRow(ws1, 17, currentLang === 'de' ? 'Empfohlene Packs' : 'Recommended Packs', costs.recommendedPacks);
+            addDataRow(ws1, 18, 'Credits pro Pack', PRICING.creditsPerPack);
+            const utilization = Math.round((costs.totalCredits / (costs.recommendedPacks * PRICING.creditsPerPack)) * 100);
+            addDataRow(ws1, 19, currentLang === 'de' ? 'Auslastung' : 'Utilization', utilization + '%', utilization > 100);
+
+            // Cost Section  
+            addSectionHeader(ws1, 21, currentLang === 'de' ? '💰 KOSTEN' : '💰 COSTS');
+
+            // Cost table header
+            ws1.getCell('B23').value = currentLang === 'de' ? 'Kategorie' : 'Category';
+            ws1.getCell('C23').value = currentLang === 'de' ? 'Monatlich' : 'Monthly';
+            ws1.getCell('D23').value = currentLang === 'de' ? 'Jährlich' : 'Yearly';
+            ['B23', 'C23', 'D23'].forEach(cell => {
+                ws1.getCell(cell).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: colors.white } };
+                ws1.getCell(cell).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.blueDark } };
+                ws1.getCell(cell).alignment = { horizontal: 'center' };
+            });
+
+            // Cost rows
+            const costRows = [
+                ['Copilot Studio', costs.copilotStudioCost, costs.copilotStudioCost * 12],
+                ['Power Apps Premium', costs.powerAppsCost, costs.powerAppsCost * 12],
+                ['Dataverse Add-On', costs.dataverseCost, costs.dataverseCost * 12],
+                ['PAYG Overage', costs.paygOverage, costs.paygOverage * 12]
+            ];
+
+            costRows.forEach((row, idx) => {
+                const rowNum = 24 + idx;
+                ws1.getCell(`B${rowNum}`).value = row[0];
+                ws1.getCell(`C${rowNum}`).value = row[1];
+                ws1.getCell(`D${rowNum}`).value = row[2];
+                ws1.getCell(`C${rowNum}`).numFmt = '"$"#,##0.00';
+                ws1.getCell(`D${rowNum}`).numFmt = '"$"#,##0.00';
+                ['B', 'C', 'D'].forEach(col => {
+                    ws1.getCell(`${col}${rowNum}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: idx % 2 === 0 ? colors.white : colors.gray } };
+                    ws1.getCell(`${col}${rowNum}`).border = { bottom: { style: 'thin', color: { argb: 'DDDDDD' } } };
+                });
+            });
+
+            // Total row (row 28 now because we have 4 cost rows)
+            ws1.getCell('B28').value = currentLang === 'de' ? '✓ GESAMTKOSTEN' : '✓ TOTAL COST';
+            ws1.getCell('C28').value = costs.totalMonthly;
+            ws1.getCell('D28').value = costs.totalYearly;
+            ['B28', 'C28', 'D28'].forEach(cell => {
+                ws1.getCell(cell).font = { name: 'Segoe UI', size: 12, bold: true, color: { argb: colors.white } };
+                ws1.getCell(cell).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.green } };
+            });
+            ws1.getCell('C28').numFmt = '"$"#,##0.00';
+            ws1.getCell('D28').numFmt = '"$"#,##0.00';
+            ws1.getRow(28).height = 26;
+
+            // Unit Economics
+            addSectionHeader(ws1, 30, currentLang === 'de' ? '📈 KENNZAHLEN' : '📈 UNIT ECONOMICS');
+            
+            const totalUsers = parseInt(document.getElementById('totalUsers').value) || 1;
+            addDataRow(ws1, 32, currentLang === 'de' ? 'Kosten pro Nutzer/Monat' : 'Cost per User/Month', costs.totalMonthly / totalUsers, false, true);
+            addDataRow(ws1, 33, currentLang === 'de' ? 'Kosten pro Agent/Monat' : 'Cost per Agent/Month', costs.totalMonthly / agents.length, false, true);
+            addDataRow(ws1, 34, currentLang === 'de' ? 'Effektiver Preis/Credit' : 'Effective Price/Credit', costs.totalCredits > 0 ? costs.totalMonthly / costs.totalCredits : 0, false, true);
+
+            // ==================== SHEET 2: Agent Details ====================
+            const ws2 = workbook.addWorksheet(currentLang === 'de' ? 'Agent Details' : 'Agent Details', {
+                properties: { tabColor: { argb: colors.purple } }
+            });
+
+            ws2.columns = [
+                { width: 20 }, { width: 10 }, { width: 12 }, { width: 12 },
+                { width: 10 }, { width: 12 }, { width: 10 }, { width: 10 }, { width: 12 },
+                { width: 12 }, { width: 14 }, { width: 12 }
+            ];
+
+            // Title
+            ws2.mergeCells('A1:L1');
+            const ws2Title = ws2.getCell('A1');
+            ws2Title.value = currentLang === 'de' ? '🤖 AGENT-KONFIGURATION & CREDIT-VERBRAUCH' : '🤖 AGENT CONFIGURATION & CREDIT CONSUMPTION';
+            ws2Title.font = { name: 'Segoe UI', size: 16, bold: true, color: { argb: colors.white } };
+            ws2Title.fill = { type: 'gradient', gradient: 'angle', degree: 90, stops: [
+                { position: 0, color: { argb: colors.purple } },
+                { position: 1, color: { argb: colors.blue } }
+            ]};
+            ws2Title.alignment = { horizontal: 'center', vertical: 'middle' };
+            ws2.getRow(1).height = 35;
+
+            // Headers
+            const agentHeaders = [
+                'Agent Name', currentLang === 'de' ? 'Nutzer' : 'Users', 'M365 Cop.', 
+                'Sessions', 'Classic (1)', 'Gen. (2)', 'Graph (10)', 'Actions (5)', 'Auton. (25)',
+                'Cr./Session', currentLang === 'de' ? 'Gesamt Cr.' : 'Total Cr.', currentLang === 'de' ? 'Anteil' : 'Share'
+            ];
+
+            agentHeaders.forEach((header, idx) => {
+                const cell = ws2.getCell(3, idx + 1);
+                cell.value = header;
+                cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: colors.white } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.blue } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                cell.border = { bottom: { style: 'medium', color: { argb: colors.blueDark } } };
+            });
+            ws2.getRow(3).height = 24;
+
+            // Agent data
+            const totalCredits = costs.totalCredits;
+            agents.forEach((agent, idx) => {
+                const rowNum = 4 + idx;
+                const creditsPerSession = calculateCreditsPerSession(agent);
+                const agentCredits = calculateAgentCredits(agent);
+                const share = totalCredits > 0 ? (agentCredits / totalCredits * 100) : 0;
+
+                const rowData = [
+                    agent.name, agent.users, agent.m365Users, agent.sessions,
+                    agent.classic, agent.generative, agent.graph, agent.actions, agent.autonomous,
+                    creditsPerSession, agentCredits, share
+                ];
+
+                rowData.forEach((val, colIdx) => {
+                    const cell = ws2.getCell(rowNum, colIdx + 1);
+                    cell.value = colIdx === 11 ? val : val;
+                    cell.font = { name: 'Segoe UI', size: 10 };
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: idx % 2 === 0 ? colors.white : colors.gray } };
+                    cell.alignment = { horizontal: colIdx === 0 ? 'left' : 'center' };
+                    cell.border = { bottom: { style: 'thin', color: { argb: 'DDDDDD' } } };
+                    
+                    if (colIdx === 11) cell.numFmt = '0.0"%"';
+                    if (colIdx === 10) {
+                        cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: colors.blue } };
+                    }
+                });
+            });
+
+            // Total row
+            const totalRowNum = 4 + agents.length + 1;
+            const totals = [
+                currentLang === 'de' ? 'GESAMT' : 'TOTAL',
+                agents.reduce((s, a) => s + a.users, 0),
+                agents.reduce((s, a) => s + a.m365Users, 0),
+                '-',
+                agents.reduce((s, a) => s + a.classic, 0),
+                agents.reduce((s, a) => s + a.generative, 0),
+                agents.reduce((s, a) => s + a.graph, 0),
+                agents.reduce((s, a) => s + a.actions, 0),
+                agents.reduce((s, a) => s + a.autonomous, 0),
+                '-',
+                totalCredits,
+                100
+            ];
+
+            totals.forEach((val, colIdx) => {
+                const cell = ws2.getCell(totalRowNum, colIdx + 1);
+                cell.value = val;
+                cell.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: colors.white } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.green } };
+                cell.alignment = { horizontal: colIdx === 0 ? 'left' : 'center' };
+                if (colIdx === 11) cell.numFmt = '0"%"';
+            });
+            ws2.getRow(totalRowNum).height = 24;
+
+            // ==================== SHEET 3: Dataverse ====================
+            const ws3 = workbook.addWorksheet(currentLang === 'de' ? 'Dataverse' : 'Dataverse', {
+                properties: { tabColor: { argb: colors.orange } }
+            });
+
+            ws3.columns = [{ width: 5 }, { width: 30 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 15 }];
+
+            ws3.mergeCells('B2:E2');
+            const ws3Title = ws3.getCell('B2');
+            ws3Title.value = currentLang === 'de' ? '💾 DATAVERSE KAPAZITÄTS-ANALYSE' : '💾 DATAVERSE CAPACITY ANALYSIS';
+            ws3Title.font = { name: 'Segoe UI', size: 16, bold: true, color: { argb: colors.white } };
+            ws3Title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.orange } };
+            ws3Title.alignment = { horizontal: 'center', vertical: 'middle' };
+            ws3.getRow(2).height = 35;
+
+            // Capacity table header
+            ['Speicher', 'Benötigt', 'Verfügbar', 'Differenz', 'Status'].forEach((h, i) => {
+                const cell = ws3.getCell(4, i + 2);
+                cell.value = h;
+                cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: colors.white } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.blue } };
+                cell.alignment = { horizontal: 'center' };
+            });
+
+            // DB row
+            const dbOk = costs.dataverseNeeds.dbShortfall <= 0;
+            ['Database', costs.dataverseNeeds.dbNeeded.toFixed(1) + ' GB', costs.dataverseNeeds.dbAvailable.toFixed(1) + ' GB',
+             (dbOk ? '' : '+') + costs.dataverseNeeds.dbShortfall.toFixed(1) + ' GB', dbOk ? '✓ OK' : '⚠️'].forEach((v, i) => {
+                const cell = ws3.getCell(5, i + 2);
+                cell.value = v;
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: dbOk ? colors.greenLight : colors.orangeLight } };
+                cell.font = { name: 'Segoe UI', size: 10, color: { argb: dbOk ? colors.green : colors.orange } };
+                cell.alignment = { horizontal: 'center' };
+            });
+
+            // File row
+            const fileOk = costs.dataverseNeeds.fileShortfall <= 0;
+            ['File Storage', costs.dataverseNeeds.fileNeeded.toFixed(1) + ' GB', costs.dataverseNeeds.fileAvailable.toFixed(1) + ' GB',
+             (fileOk ? '' : '+') + costs.dataverseNeeds.fileShortfall.toFixed(1) + ' GB', fileOk ? '✓ OK' : '⚠️'].forEach((v, i) => {
+                const cell = ws3.getCell(6, i + 2);
+                cell.value = v;
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fileOk ? colors.greenLight : colors.orangeLight } };
+                cell.font = { name: 'Segoe UI', size: 10, color: { argb: fileOk ? colors.green : colors.orange } };
+                cell.alignment = { horizontal: 'center' };
+            });
+
+            // ==================== SHEET 4: Credit Reference ====================
+            const ws4 = workbook.addWorksheet(currentLang === 'de' ? 'Credit Referenz' : 'Credit Reference', {
+                properties: { tabColor: { argb: colors.green } }
+            });
+
+            ws4.columns = [{ width: 5 }, { width: 25 }, { width: 12 }, { width: 40 }, { width: 20 }];
+
+            ws4.mergeCells('B2:E2');
+            const ws4Title = ws4.getCell('B2');
+            ws4Title.value = currentLang === 'de' ? '📖 COPILOT STUDIO CREDIT REFERENZ' : '📖 COPILOT STUDIO CREDIT REFERENCE';
+            ws4Title.font = { name: 'Segoe UI', size: 16, bold: true, color: { argb: colors.white } };
+            ws4Title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.green } };
+            ws4Title.alignment = { horizontal: 'center', vertical: 'middle' };
+            ws4.getRow(2).height = 35;
+
+            // Credit rates header
+            [currentLang === 'de' ? 'Antworttyp' : 'Response Type', 'Credits', currentLang === 'de' ? 'Beschreibung' : 'Description', 'M365 Copilot'].forEach((h, i) => {
+                const cell = ws4.getCell(4, i + 2);
+                cell.value = h;
+                cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: colors.white } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.blue } };
+                cell.alignment = { horizontal: 'center' };
+            });
+
+            const creditRates = [
+                ['Classic Answers', '1', currentLang === 'de' ? 'Vordefinierte FAQ-Antworten' : 'Predefined FAQ responses', true],
+                ['Generative Answers', '2', currentLang === 'de' ? 'KI-generierte Antworten' : 'AI-generated answers', true],
+                ['Graph Grounding', '10', currentLang === 'de' ? 'SharePoint/M365 Daten' : 'SharePoint/M365 data', true],
+                ['Agent Actions', '5', currentLang === 'de' ? 'Trigger, Tools' : 'Triggers, tools', true],
+                ['Flow Actions', '13/100', currentLang === 'de' ? 'Pro 100 Flow-Aktionen' : 'Per 100 flow actions', true],
+                ['Autonomous', '25', currentLang === 'de' ? 'Automatische Auslösung' : 'Auto triggering', false],
+                ['AI Basic', '0.1', currentLang === 'de' ? 'Einfache KI-Tasks' : 'Simple AI tasks', false],
+                ['AI Standard', '1', currentLang === 'de' ? 'Mittlere KI-Tasks' : 'Medium AI tasks', false],
+                ['AI Premium', '10', currentLang === 'de' ? 'Reasoning-Modelle' : 'Reasoning models', false],
+                ['Content Proc.', '8', currentLang === 'de' ? 'Pro Seite (PDF etc.)' : 'Per page (PDF)', false]
+            ];
+
+            creditRates.forEach((row, idx) => {
+                const rowNum = 5 + idx;
+                const isFree = row[3];
+                [row[0], row[1], row[2], isFree ? '✓ Free' : '⚠️ Charged'].forEach((v, colIdx) => {
+                    const cell = ws4.getCell(rowNum, colIdx + 2);
+                    cell.value = v;
+                    cell.font = { name: 'Segoe UI', size: 10, color: { argb: colIdx === 3 ? (isFree ? colors.green : colors.orange) : colors.black } };
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: idx % 2 === 0 ? colors.white : colors.gray } };
+                    cell.alignment = { horizontal: colIdx === 2 ? 'left' : 'center' };
+                });
+            });
+
+            // Save file
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            saveAs(blob, `Copilot_Studio_Kalkulation_${today.toISOString().split('T')[0]}.xlsx`);
+        }
+    </script>
+</body>
+</html>
