@@ -201,8 +201,8 @@
             content: '';
             position: absolute;
             top: 16px;
-            left: 60px;
-            right: 60px;
+            left: 40px;
+            right: 40px;
             height: 2px;
             background: var(--border);
         }
@@ -213,7 +213,11 @@
             align-items: center;
             cursor: pointer;
             z-index: 1;
+            flex: 1;
         }
+
+        .progress-step:first-child { align-items: flex-start; }
+        .progress-step:last-child { align-items: flex-end; }
 
         .step-number {
             width: 32px;
@@ -905,10 +909,12 @@
                                 <div class="form-group">
                                     <label class="form-label" id="managedEnvsLabel">Managed Environments</label>
                                     <input type="number" class="form-input" id="managedEnvs" value="3" min="0" onchange="updateCalculations()">
+                                    <span class="form-hint" id="managedEnvsHint">Benötigt Dataverse-Kapazität</span>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label" id="unmanagedEnvsLabel">Standard Environments</label>
                                     <input type="number" class="form-input" id="unmanagedEnvs" value="2" min="0" onchange="updateCalculations()">
+                                    <span class="form-hint" id="unmanagedEnvsHint">Keine zusätzlichen Kosten</span>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label" id="dbPerEnvLabel">Database GB / Environment</label>
@@ -923,7 +929,7 @@
 
                         <div class="info-box warning">
                             <div class="info-box-title" id="infoBoxTitle2">Managed Environments</div>
-                            <p class="info-box-text" id="infoBoxText2">Managed Environments benötigen Dataverse-Kapazität. Die Standard-Kapazität beträgt 15 GB Database und 20 GB File Storage.</p>
+                            <p class="info-box-text" id="infoBoxText2">Managed Environments benötigen Dataverse-Kapazität. Die Standard-Kapazität beträgt 15 GB Database und 20 GB File Storage. Zusätzliche Kapazität kostet $40/GB (Database) bzw. $2/GB (File).</p>
                         </div>
 
                         <div class="form-section" style="margin-top: 24px;">
@@ -1759,14 +1765,53 @@
             const dataverseNeeds = calculateDataverseNeeds();
             const capacityOptions = calculateCapacityOptions(dataverseNeeds);
             let copilotStudioCost = 0, paygOverage = 0, recommendedPacks = 0;
-            if (licenseModel === 'prepaid' || licenseModel === 'hybrid') {
+            
+            if (licenseModel === 'prepaid') {
+                // Pure prepaid: round up to full packs
                 recommendedPacks = Math.max(1, Math.ceil(totalCredits / PRICING.creditsPerPack));
-                const includedCredits = recommendedPacks * PRICING.creditsPerPack;
                 copilotStudioCost = recommendedPacks * PRICING.prepaidPackPrice;
-                if (licenseModel === 'hybrid' && totalCredits > includedCredits) paygOverage = (totalCredits - includedCredits) * PRICING.paygPricePerCredit;
-            } else {
+                paygOverage = 0;
+            } else if (licenseModel === 'payg') {
+                // Pure PAYG: pay per credit
+                recommendedPacks = 0;
                 copilotStudioCost = totalCredits * PRICING.paygPricePerCredit;
+                paygOverage = 0;
+            } else if (licenseModel === 'hybrid') {
+                // Hybrid: optimize between prepaid packs and PAYG for remainder
+                // Calculate cost for different pack counts and find the cheapest option
+                const pricePerCredit = PRICING.paygPricePerCredit; // $0.01
+                const packPrice = PRICING.prepaidPackPrice; // $200
+                const creditsPerPack = PRICING.creditsPerPack; // 25,000
+                
+                // Option 1: Pure PAYG (0 packs)
+                const purePaygCost = totalCredits * pricePerCredit;
+                
+                // Find optimal number of packs
+                let bestCost = purePaygCost;
+                let bestPacks = 0;
+                let bestOverage = totalCredits * pricePerCredit;
+                
+                // Try different pack counts
+                const maxPacks = Math.ceil(totalCredits / creditsPerPack) + 1;
+                for (let packs = 1; packs <= maxPacks; packs++) {
+                    const includedCredits = packs * creditsPerPack;
+                    const overageCredits = Math.max(0, totalCredits - includedCredits);
+                    const packCost = packs * packPrice;
+                    const overageCost = overageCredits * pricePerCredit;
+                    const totalCost = packCost + overageCost;
+                    
+                    if (totalCost < bestCost) {
+                        bestCost = totalCost;
+                        bestPacks = packs;
+                        bestOverage = overageCost;
+                    }
+                }
+                
+                recommendedPacks = bestPacks;
+                copilotStudioCost = bestPacks * packPrice;
+                paygOverage = bestOverage;
             }
+            
             let dataverseCost = capacityOptions.length > 0 ? capacityOptions[0].cost : 0;
             const powerAppsUsers = parseInt(document.getElementById('powerAppsPremiumUsers').value) || 0;
             const powerAppsCost = powerAppsUsers * PRICING.powerAppsPremium;
@@ -1847,111 +1892,507 @@
             document.getElementById('recommendationsText').innerHTML = recs.join('<br>');
         }
 
-        // Excel Export
+        // Excel Export - Professional & Comprehensive
         async function exportToExcel() {
             const costs = calculateCosts();
             const workbook = new ExcelJS.Workbook();
             workbook.creator = 'Copilot Studio Calculator';
             workbook.created = new Date();
+            const today = new Date();
+            const dateStr = today.toLocaleDateString(currentLang === 'de' ? 'de-DE' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
-            const colors = { primary: '0f172a', accent: '3b82f6', success: '10b981', warning: 'f59e0b', bg: 'f8fafc', white: 'ffffff', border: 'e2e8f0' };
+            const colors = { 
+                primary: '0f172a', 
+                accent: '3b82f6', 
+                accentLight: 'dbeafe',
+                success: '10b981', 
+                successLight: 'd1fae5',
+                warning: 'f59e0b', 
+                warningLight: 'fef3c7',
+                bg: 'f8fafc', 
+                white: 'ffffff', 
+                border: 'e2e8f0',
+                text: '334155',
+                textMuted: '64748b'
+            };
 
-            // Sheet 1: Summary
-            const ws1 = workbook.addWorksheet(currentLang === 'de' ? 'Zusammenfassung' : 'Summary');
-            ws1.columns = [{ width: 5 }, { width: 30 }, { width: 18 }, { width: 18 }];
+            // Helper functions
+            const styleHeader = (cell, color = colors.primary) => {
+                cell.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: colors.white } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } };
+                cell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+            };
 
+            const styleTableHeader = (cell) => {
+                cell.font = { name: 'Segoe UI', size: 9, bold: true, color: { argb: colors.text } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.bg } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                cell.border = { bottom: { style: 'thin', color: { argb: colors.border } } };
+            };
+
+            const styleDataCell = (cell, isAlt = false, align = 'left') => {
+                cell.font = { name: 'Segoe UI', size: 10, color: { argb: colors.text } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isAlt ? colors.bg : colors.white } };
+                cell.alignment = { horizontal: align, vertical: 'middle' };
+                cell.border = { bottom: { style: 'thin', color: { argb: colors.border } } };
+            };
+
+            const styleTotalRow = (cell) => {
+                cell.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: colors.white } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.success } };
+                cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            };
+
+            // ==================== SHEET 1: Executive Summary ====================
+            const ws1 = workbook.addWorksheet(currentLang === 'de' ? 'Executive Summary' : 'Executive Summary', {
+                properties: { tabColor: { argb: colors.accent } }
+            });
+            ws1.columns = [{ width: 4 }, { width: 32 }, { width: 18 }, { width: 18 }, { width: 4 }];
+
+            // Title Block
             ws1.mergeCells('B2:D2');
-            ws1.getCell('B2').value = 'MICROSOFT COPILOT STUDIO';
-            ws1.getCell('B2').font = { name: 'Inter', size: 18, bold: true, color: { argb: colors.white } };
+            ws1.getCell('B2').value = 'COPILOT STUDIO';
+            ws1.getCell('B2').font = { name: 'Segoe UI', size: 24, bold: true, color: { argb: colors.white } };
             ws1.getCell('B2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.primary } };
             ws1.getCell('B2').alignment = { horizontal: 'center', vertical: 'middle' };
-            ws1.getRow(2).height = 35;
+            ws1.getRow(2).height = 40;
 
-            const today = new Date();
             ws1.mergeCells('B3:D3');
-            ws1.getCell('B3').value = today.toLocaleDateString(currentLang === 'de' ? 'de-DE' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-            ws1.getCell('B3').font = { name: 'Inter', size: 10, color: { argb: '64748b' } };
-            ws1.getCell('B3').alignment = { horizontal: 'center' };
+            ws1.getCell('B3').value = currentLang === 'de' ? 'Kostenkalkulationsreport' : 'Cost Calculation Report';
+            ws1.getCell('B3').font = { name: 'Segoe UI', size: 12, color: { argb: colors.white } };
+            ws1.getCell('B3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.primary } };
+            ws1.getCell('B3').alignment = { horizontal: 'center', vertical: 'middle' };
+            ws1.getRow(3).height = 25;
 
-            let row = 5;
-            const addSection = (title) => {
-                ws1.mergeCells(`B${row}:D${row}`);
-                ws1.getCell(`B${row}`).value = title;
-                ws1.getCell(`B${row}`).font = { name: 'Inter', size: 11, bold: true, color: { argb: colors.white } };
-                ws1.getCell(`B${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.accent } };
-                ws1.getRow(row).height = 24;
+            ws1.mergeCells('B4:D4');
+            ws1.getCell('B4').value = dateStr;
+            ws1.getCell('B4').font = { name: 'Segoe UI', size: 10, italic: true, color: { argb: colors.textMuted } };
+            ws1.getCell('B4').alignment = { horizontal: 'center' };
+
+            // Key Metrics Cards
+            let row = 6;
+            ws1.mergeCells(`B${row}:D${row}`);
+            styleHeader(ws1.getCell(`B${row}`), colors.accent);
+            ws1.getCell(`B${row}`).value = currentLang === 'de' ? 'ZUSAMMENFASSUNG' : 'SUMMARY';
+            ws1.getRow(row).height = 26;
+            row++;
+
+            const summaryData = [
+                [currentLang === 'de' ? 'Gesamtnutzer' : 'Total Users', parseInt(document.getElementById('totalUsers').value)],
+                [currentLang === 'de' ? 'M365 Copilot Nutzer' : 'M365 Copilot Users', parseInt(document.getElementById('m365CopilotUsers').value)],
+                [currentLang === 'de' ? 'Power Apps Premium Nutzer' : 'Power Apps Premium Users', parseInt(document.getElementById('powerAppsPremiumUsers').value)],
+                [currentLang === 'de' ? 'Managed Environments' : 'Managed Environments', parseInt(document.getElementById('managedEnvs').value) || 0],
+                [currentLang === 'de' ? 'Standard Environments' : 'Standard Environments', parseInt(document.getElementById('unmanagedEnvs').value) || 0],
+                [currentLang === 'de' ? 'Anzahl Agents' : 'Number of Agents', agents.length],
+                [currentLang === 'de' ? 'Lizenzmodell' : 'License Model', costs.licenseModel === 'prepaid' ? 'Prepaid Packs' : costs.licenseModel === 'payg' ? 'Pay-As-You-Go' : 'Hybrid']
+            ];
+
+            summaryData.forEach((item, idx) => {
+                ws1.getCell(`B${row}`).value = item[0];
+                ws1.getCell(`C${row}`).value = item[1];
+                styleDataCell(ws1.getCell(`B${row}`), idx % 2 === 1);
+                styleDataCell(ws1.getCell(`C${row}`), idx % 2 === 1, 'right');
+                ws1.getCell(`C${row}`).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: colors.accent } };
                 row++;
-            };
+            });
 
-            const addRow = (label, value, isTotal = false) => {
-                ws1.getCell(`B${row}`).value = label;
-                ws1.getCell(`C${row}`).value = value;
-                if (isTotal) {
-                    ['B', 'C', 'D'].forEach(c => {
-                        ws1.getCell(`${c}${row}`).font = { name: 'Inter', bold: true, color: { argb: colors.white } };
-                        ws1.getCell(`${c}${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.success } };
-                    });
-                } else {
-                    ws1.getCell(`B${row}`).font = { name: 'Inter', size: 10 };
-                    ws1.getCell(`C${row}`).font = { name: 'Inter', size: 10 };
-                    ws1.getCell(`B${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: row % 2 === 0 ? colors.bg : colors.white } };
-                    ws1.getCell(`C${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: row % 2 === 0 ? colors.bg : colors.white } };
-                }
+            // Credit Consumption
+            row += 1;
+            ws1.mergeCells(`B${row}:D${row}`);
+            styleHeader(ws1.getCell(`B${row}`), colors.accent);
+            ws1.getCell(`B${row}`).value = currentLang === 'de' ? 'CREDIT-VERBRAUCH' : 'CREDIT CONSUMPTION';
+            ws1.getRow(row).height = 26;
+            row++;
+
+            const utilization = costs.recommendedPacks > 0 ? Math.round((costs.totalCredits / (costs.recommendedPacks * PRICING.creditsPerPack)) * 100) : 0;
+            const creditData = [
+                [currentLang === 'de' ? 'Credits pro Monat' : 'Credits per Month', costs.totalCredits.toLocaleString()],
+                [currentLang === 'de' ? 'Credits pro Jahr' : 'Credits per Year', (costs.totalCredits * 12).toLocaleString()],
+                [currentLang === 'de' ? 'Empfohlene Prepaid Packs' : 'Recommended Prepaid Packs', costs.recommendedPacks],
+                [currentLang === 'de' ? 'Inkludierte Credits (Packs)' : 'Included Credits (Packs)', (costs.recommendedPacks * PRICING.creditsPerPack).toLocaleString()],
+                [currentLang === 'de' ? 'Auslastung' : 'Utilization', utilization + '%'],
+                [currentLang === 'de' ? 'Überschuss Credits' : 'Overage Credits', Math.max(0, costs.totalCredits - costs.recommendedPacks * PRICING.creditsPerPack).toLocaleString()]
+            ];
+
+            creditData.forEach((item, idx) => {
+                ws1.getCell(`B${row}`).value = item[0];
+                ws1.getCell(`C${row}`).value = item[1];
+                styleDataCell(ws1.getCell(`B${row}`), idx % 2 === 1);
+                styleDataCell(ws1.getCell(`C${row}`), idx % 2 === 1, 'right');
+                if (idx === 0) ws1.getCell(`C${row}`).font = { name: 'Segoe UI', size: 12, bold: true, color: { argb: colors.accent } };
+                if (idx === 4 && utilization > 100) ws1.getCell(`C${row}`).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: colors.warning } };
                 row++;
-            };
+            });
 
-            addSection(currentLang === 'de' ? 'ÜBERSICHT' : 'OVERVIEW');
-            row++;
-            addRow(currentLang === 'de' ? 'Gesamtnutzer' : 'Total Users', parseInt(document.getElementById('totalUsers').value));
-            addRow('M365 Copilot', parseInt(document.getElementById('m365CopilotUsers').value));
-            addRow('Power Apps Premium', parseInt(document.getElementById('powerAppsPremiumUsers').value));
-            addRow('Agents', agents.length);
-            row++;
-
-            addSection('CREDITS');
-            row++;
-            addRow(currentLang === 'de' ? 'Credits / Monat' : 'Credits / Month', costs.totalCredits);
-            addRow(currentLang === 'de' ? 'Empfohlene Packs' : 'Recommended Packs', costs.recommendedPacks);
+            // Cost Overview
+            row += 1;
+            ws1.mergeCells(`B${row}:D${row}`);
+            styleHeader(ws1.getCell(`B${row}`), colors.accent);
+            ws1.getCell(`B${row}`).value = currentLang === 'de' ? 'KOSTENÜBERSICHT' : 'COST OVERVIEW';
+            ws1.getRow(row).height = 26;
             row++;
 
-            addSection(currentLang === 'de' ? 'KOSTEN' : 'COSTS');
-            row++;
+            // Cost table header
             ws1.getCell(`B${row}`).value = currentLang === 'de' ? 'Kategorie' : 'Category';
             ws1.getCell(`C${row}`).value = currentLang === 'de' ? 'Monatlich' : 'Monthly';
             ws1.getCell(`D${row}`).value = currentLang === 'de' ? 'Jährlich' : 'Yearly';
-            ['B', 'C', 'D'].forEach(c => {
-                ws1.getCell(`${c}${row}`).font = { name: 'Inter', size: 10, bold: true };
-                ws1.getCell(`${c}${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.bg } };
-            });
+            ['B', 'C', 'D'].forEach(c => styleTableHeader(ws1.getCell(`${c}${row}`)));
             row++;
 
-            [
-                ['Copilot Studio', costs.copilotStudioCost, costs.copilotStudioCost * 12],
-                ['Power Apps Premium', costs.powerAppsCost, costs.powerAppsCost * 12],
-                ['Dataverse', costs.dataverseCost, costs.dataverseCost * 12],
-                ['PAYG Overage', costs.paygOverage, costs.paygOverage * 12]
-            ].forEach(([cat, monthly, yearly]) => {
-                ws1.getCell(`B${row}`).value = cat;
-                ws1.getCell(`C${row}`).value = monthly;
-                ws1.getCell(`D${row}`).value = yearly;
+            // Build cost label based on license model
+            let copilotLabel = currentLang === 'de' ? 'Copilot Studio Lizenz' : 'Copilot Studio License';
+            if (costs.licenseModel === 'prepaid') {
+                copilotLabel = currentLang === 'de' ? `Copilot Studio (${costs.recommendedPacks} Prepaid Pack${costs.recommendedPacks > 1 ? 's' : ''})` : `Copilot Studio (${costs.recommendedPacks} Prepaid Pack${costs.recommendedPacks > 1 ? 's' : ''})`;
+            } else if (costs.licenseModel === 'payg') {
+                copilotLabel = currentLang === 'de' ? 'Copilot Studio (Pay-As-You-Go)' : 'Copilot Studio (Pay-As-You-Go)';
+            } else if (costs.licenseModel === 'hybrid') {
+                copilotLabel = currentLang === 'de' ? `Copilot Studio (${costs.recommendedPacks} Pack${costs.recommendedPacks > 1 ? 's' : ''} Hybrid)` : `Copilot Studio (${costs.recommendedPacks} Pack${costs.recommendedPacks > 1 ? 's' : ''} Hybrid)`;
+            }
+
+            const costData = [
+                [copilotLabel, costs.copilotStudioCost, costs.copilotStudioCost * 12],
+                [currentLang === 'de' ? 'Power Apps Premium Lizenzen' : 'Power Apps Premium Licenses', costs.powerAppsCost, costs.powerAppsCost * 12],
+                [currentLang === 'de' ? 'Dataverse Kapazität' : 'Dataverse Capacity', costs.dataverseCost, costs.dataverseCost * 12],
+                [currentLang === 'de' ? 'PAYG Überschuss' : 'PAYG Overage', costs.paygOverage, costs.paygOverage * 12]
+            ];
+
+            costData.forEach((item, idx) => {
+                ws1.getCell(`B${row}`).value = item[0];
+                ws1.getCell(`C${row}`).value = item[1];
+                ws1.getCell(`D${row}`).value = item[2];
+                styleDataCell(ws1.getCell(`B${row}`), idx % 2 === 1);
+                styleDataCell(ws1.getCell(`C${row}`), idx % 2 === 1, 'right');
+                styleDataCell(ws1.getCell(`D${row}`), idx % 2 === 1, 'right');
                 ws1.getCell(`C${row}`).numFmt = '"$"#,##0';
                 ws1.getCell(`D${row}`).numFmt = '"$"#,##0';
                 row++;
             });
 
-            ws1.getCell(`B${row}`).value = currentLang === 'de' ? 'GESAMT' : 'TOTAL';
+            // Total row
+            ws1.getCell(`B${row}`).value = currentLang === 'de' ? 'GESAMTKOSTEN' : 'TOTAL COST';
             ws1.getCell(`C${row}`).value = costs.totalMonthly;
             ws1.getCell(`D${row}`).value = costs.totalYearly;
+            ['B', 'C', 'D'].forEach(c => {
+                styleTotalRow(ws1.getCell(`${c}${row}`));
+                if (c === 'B') ws1.getCell(`${c}${row}`).alignment = { horizontal: 'left', indent: 1 };
+            });
             ws1.getCell(`C${row}`).numFmt = '"$"#,##0';
             ws1.getCell(`D${row}`).numFmt = '"$"#,##0';
-            ['B', 'C', 'D'].forEach(c => {
-                ws1.getCell(`${c}${row}`).font = { name: 'Inter', bold: true, color: { argb: colors.white } };
-                ws1.getCell(`${c}${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.primary } };
+            ws1.getRow(row).height = 28;
+            row++;
+
+            // Unit Economics
+            row += 1;
+            ws1.mergeCells(`B${row}:D${row}`);
+            styleHeader(ws1.getCell(`B${row}`), colors.accent);
+            ws1.getCell(`B${row}`).value = currentLang === 'de' ? 'KENNZAHLEN' : 'UNIT ECONOMICS';
+            ws1.getRow(row).height = 26;
+            row++;
+
+            const totalUsers = parseInt(document.getElementById('totalUsers').value) || 1;
+            const unitData = [
+                [currentLang === 'de' ? 'Kosten pro Nutzer / Monat' : 'Cost per User / Month', costs.totalMonthly / totalUsers],
+                [currentLang === 'de' ? 'Kosten pro Agent / Monat' : 'Cost per Agent / Month', costs.totalMonthly / agents.length],
+                [currentLang === 'de' ? 'Effektiver Preis pro Credit' : 'Effective Price per Credit', costs.totalCredits > 0 ? costs.totalMonthly / costs.totalCredits : 0],
+                [currentLang === 'de' ? 'Prepaid Preis pro Credit' : 'Prepaid Price per Credit', PRICING.prepaidPackPrice / PRICING.creditsPerPack],
+                [currentLang === 'de' ? 'PAYG Preis pro Credit' : 'PAYG Price per Credit', PRICING.paygPricePerCredit]
+            ];
+
+            unitData.forEach((item, idx) => {
+                ws1.getCell(`B${row}`).value = item[0];
+                ws1.getCell(`C${row}`).value = item[1];
+                styleDataCell(ws1.getCell(`B${row}`), idx % 2 === 1);
+                styleDataCell(ws1.getCell(`C${row}`), idx % 2 === 1, 'right');
+                ws1.getCell(`C${row}`).numFmt = '"$"#,##0.000';
+                row++;
             });
 
+            // ==================== SHEET 2: Agent Details ====================
+            const ws2 = workbook.addWorksheet(currentLang === 'de' ? 'Agent Details' : 'Agent Details', {
+                properties: { tabColor: { argb: colors.primary } }
+            });
+            
+            ws2.columns = [
+                { width: 20 }, { width: 10 }, { width: 10 }, { width: 10 },
+                { width: 9 }, { width: 9 }, { width: 9 }, { width: 9 }, { width: 9 },
+                { width: 9 }, { width: 9 }, { width: 9 }, { width: 9 }, { width: 9 },
+                { width: 12 }, { width: 14 }, { width: 10 }
+            ];
+
+            // Title
+            ws2.mergeCells('A1:Q1');
+            ws2.getCell('A1').value = currentLang === 'de' ? 'AGENT-KONFIGURATION & CREDIT-VERBRAUCH' : 'AGENT CONFIGURATION & CREDIT CONSUMPTION';
+            ws2.getCell('A1').font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: colors.white } };
+            ws2.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.primary } };
+            ws2.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+            ws2.getRow(1).height = 32;
+
+            // Section headers
+            ws2.mergeCells('A2:A2');
+            ws2.mergeCells('B2:D2');
+            ws2.getCell('B2').value = currentLang === 'de' ? 'Nutzung' : 'Usage';
+            ws2.mergeCells('E2:I2');
+            ws2.getCell('E2').value = currentLang === 'de' ? 'Kostenlos für M365 Copilot' : 'Free for M365 Copilot';
+            ws2.getCell('E2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.successLight } };
+            ws2.mergeCells('J2:N2');
+            ws2.getCell('J2').value = currentLang === 'de' ? 'Immer berechnet' : 'Always Charged';
+            ws2.getCell('J2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.warningLight } };
+            ws2.mergeCells('O2:Q2');
+            ws2.getCell('O2').value = currentLang === 'de' ? 'Ergebnis' : 'Results';
+            ['B2', 'E2', 'J2', 'O2'].forEach(c => {
+                ws2.getCell(c).font = { name: 'Segoe UI', size: 9, bold: true, color: { argb: colors.text } };
+                ws2.getCell(c).alignment = { horizontal: 'center' };
+            });
+
+            // Column headers
+            const agentHeaders = [
+                'Agent', currentLang === 'de' ? 'Nutzer' : 'Users', 'M365', 'Sessions',
+                'Classic', 'Gen.', 'Graph', 'Actions', 'Flow',
+                'Auton.', 'AI-B', 'AI-S', 'AI-P', 'Content',
+                'Cr/Sess', currentLang === 'de' ? 'Credits/Mo' : 'Credits/Mo', '%'
+            ];
+            const creditValues = ['', '', '', '', '1', '2', '10', '5', '13/100', '25', '0.1', '1', '10', '8', '', '', ''];
+
+            agentHeaders.forEach((h, i) => {
+                const cell = ws2.getCell(3, i + 1);
+                cell.value = h;
+                styleTableHeader(cell);
+            });
+            creditValues.forEach((v, i) => {
+                if (v) {
+                    const cell = ws2.getCell(4, i + 1);
+                    cell.value = `(${v} Cr)`;
+                    cell.font = { name: 'Segoe UI', size: 8, italic: true, color: { argb: colors.textMuted } };
+                    cell.alignment = { horizontal: 'center' };
+                }
+            });
+
+            // Agent data
+            const totalCreditsAll = costs.totalCredits;
+            agents.forEach((agent, idx) => {
+                const rowNum = 5 + idx;
+                const creditsPerSession = calculateCreditsPerSession(agent);
+                const agentCredits = calculateAgentCredits(agent);
+                const share = totalCreditsAll > 0 ? (agentCredits / totalCreditsAll * 100) : 0;
+
+                const data = [
+                    agent.name, agent.users, agent.m365Users, agent.sessions,
+                    agent.classic, agent.generative, agent.graph, agent.actions, agent.flowActions,
+                    agent.autonomous, agent.aiBasic, agent.aiStandard, agent.aiPremium, agent.contentProcessing,
+                    creditsPerSession, agentCredits, share
+                ];
+
+                data.forEach((v, i) => {
+                    const cell = ws2.getCell(rowNum, i + 1);
+                    cell.value = i === 16 ? v : v;
+                    styleDataCell(cell, idx % 2 === 1, i === 0 ? 'left' : 'center');
+                    
+                    // Highlight free columns
+                    if (i >= 4 && i <= 8) {
+                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: idx % 2 === 1 ? 'ecfdf5' : 'f0fdf4' } };
+                    }
+                    // Highlight charged columns
+                    if (i >= 9 && i <= 13) {
+                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: idx % 2 === 1 ? 'fefce8' : 'fef9c3' } };
+                    }
+                    // Format results
+                    if (i === 15) {
+                        cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: colors.accent } };
+                        cell.numFmt = '#,##0';
+                    }
+                    if (i === 16) cell.numFmt = '0.0"%"';
+                });
+            });
+
+            // Total row
+            const totalRow = 5 + agents.length + 1;
+            ws2.getCell(totalRow, 1).value = currentLang === 'de' ? 'GESAMT' : 'TOTAL';
+            ws2.getCell(totalRow, 2).value = agents.reduce((s, a) => s + a.users, 0);
+            ws2.getCell(totalRow, 3).value = agents.reduce((s, a) => s + a.m365Users, 0);
+            ws2.getCell(totalRow, 15).value = '';
+            ws2.getCell(totalRow, 16).value = totalCreditsAll;
+            ws2.getCell(totalRow, 17).value = 100;
+            
+            for (let i = 1; i <= 17; i++) {
+                const cell = ws2.getCell(totalRow, i);
+                cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: colors.white } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.primary } };
+                cell.alignment = { horizontal: i === 1 ? 'left' : 'center' };
+            }
+            ws2.getCell(totalRow, 16).numFmt = '#,##0';
+            ws2.getCell(totalRow, 17).numFmt = '0"%"';
+
+            // ==================== SHEET 3: Dataverse Capacity ====================
+            const ws3 = workbook.addWorksheet(currentLang === 'de' ? 'Dataverse Kapazität' : 'Dataverse Capacity', {
+                properties: { tabColor: { argb: colors.warning } }
+            });
+            ws3.columns = [{ width: 4 }, { width: 28 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 14 }];
+
+            ws3.mergeCells('B2:F2');
+            ws3.getCell('B2').value = currentLang === 'de' ? 'DATAVERSE KAPAZITÄTS-ANALYSE' : 'DATAVERSE CAPACITY ANALYSIS';
+            ws3.getCell('B2').font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: colors.white } };
+            ws3.getCell('B2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.warning } };
+            ws3.getCell('B2').alignment = { horizontal: 'center', vertical: 'middle' };
+            ws3.getRow(2).height = 32;
+
+            // Capacity status table
+            ws3.getCell('B4').value = currentLang === 'de' ? 'Speichertyp' : 'Storage Type';
+            ws3.getCell('C4').value = currentLang === 'de' ? 'Benötigt' : 'Required';
+            ws3.getCell('D4').value = currentLang === 'de' ? 'Verfügbar' : 'Available';
+            ws3.getCell('E4').value = currentLang === 'de' ? 'Differenz' : 'Difference';
+            ws3.getCell('F4').value = 'Status';
+            ['B4', 'C4', 'D4', 'E4', 'F4'].forEach(c => styleTableHeader(ws3.getCell(c)));
+
+            const dbOk = costs.dataverseNeeds.dbShortfall <= 0;
+            const fileOk = costs.dataverseNeeds.fileShortfall <= 0;
+
+            ws3.getCell('B5').value = 'Database';
+            ws3.getCell('C5').value = costs.dataverseNeeds.dbNeeded.toFixed(1) + ' GB';
+            ws3.getCell('D5').value = costs.dataverseNeeds.dbAvailable.toFixed(1) + ' GB';
+            ws3.getCell('E5').value = (dbOk ? '' : '+') + costs.dataverseNeeds.dbShortfall.toFixed(1) + ' GB';
+            ws3.getCell('F5').value = dbOk ? 'OK' : (currentLang === 'de' ? 'Zusätzlich benötigt' : 'Additional needed');
+            
+            ws3.getCell('B6').value = 'File Storage';
+            ws3.getCell('C6').value = costs.dataverseNeeds.fileNeeded.toFixed(1) + ' GB';
+            ws3.getCell('D6').value = costs.dataverseNeeds.fileAvailable.toFixed(1) + ' GB';
+            ws3.getCell('E6').value = (fileOk ? '' : '+') + costs.dataverseNeeds.fileShortfall.toFixed(1) + ' GB';
+            ws3.getCell('F6').value = fileOk ? 'OK' : (currentLang === 'de' ? 'Zusätzlich benötigt' : 'Additional needed');
+
+            [5, 6].forEach((r, idx) => {
+                const isOk = idx === 0 ? dbOk : fileOk;
+                ['B', 'C', 'D', 'E', 'F'].forEach(c => {
+                    ws3.getCell(`${c}${r}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isOk ? colors.successLight : colors.warningLight } };
+                    ws3.getCell(`${c}${r}`).font = { name: 'Segoe UI', size: 10, color: { argb: isOk ? colors.success : colors.warning } };
+                    ws3.getCell(`${c}${r}`).alignment = { horizontal: c === 'B' ? 'left' : 'center' };
+                });
+            });
+
+            // Capacity sources
+            ws3.mergeCells('B8:F8');
+            styleHeader(ws3.getCell('B8'), colors.accent);
+            ws3.getCell('B8').value = currentLang === 'de' ? 'KAPAZITÄTSQUELLEN' : 'CAPACITY SOURCES';
+
+            ws3.getCell('B9').value = currentLang === 'de' ? 'Quelle' : 'Source';
+            ws3.getCell('C9').value = 'Database';
+            ws3.getCell('D9').value = 'File';
+            ws3.getCell('E9').value = currentLang === 'de' ? 'Preis' : 'Price';
+            ['B9', 'C9', 'D9', 'E9'].forEach(c => styleTableHeader(ws3.getCell(c)));
+
+            const capacitySources = [
+                ['Copilot Studio (Default)', '15 GB', '20 GB', currentLang === 'de' ? 'Inkludiert' : 'Included'],
+                ['Power Apps Premium (1.)', '+20 GB', '+20 GB', '$20/User/Mo'],
+                ['Power Apps Premium (n+1)', '+250 MB', '+2 GB', '$20/User/Mo'],
+                ['Dataverse Add-On', currentLang === 'de' ? 'Pro GB' : 'Per GB', currentLang === 'de' ? 'Pro GB' : 'Per GB', '$40 DB / $2 File']
+            ];
+
+            capacitySources.forEach((item, idx) => {
+                const r = 10 + idx;
+                ws3.getCell(`B${r}`).value = item[0];
+                ws3.getCell(`C${r}`).value = item[1];
+                ws3.getCell(`D${r}`).value = item[2];
+                ws3.getCell(`E${r}`).value = item[3];
+                ['B', 'C', 'D', 'E'].forEach(c => styleDataCell(ws3.getCell(`${c}${r}`), idx % 2 === 1, c === 'B' ? 'left' : 'center'));
+            });
+
+            // ==================== SHEET 4: Credit Reference ====================
+            const ws4 = workbook.addWorksheet(currentLang === 'de' ? 'Credit Referenz' : 'Credit Reference', {
+                properties: { tabColor: { argb: colors.success } }
+            });
+            ws4.columns = [{ width: 4 }, { width: 26 }, { width: 12 }, { width: 38 }, { width: 18 }];
+
+            ws4.mergeCells('B2:E2');
+            ws4.getCell('B2').value = currentLang === 'de' ? 'COPILOT STUDIO CREDIT REFERENZ' : 'COPILOT STUDIO CREDIT REFERENCE';
+            ws4.getCell('B2').font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: colors.white } };
+            ws4.getCell('B2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.success } };
+            ws4.getCell('B2').alignment = { horizontal: 'center', vertical: 'middle' };
+            ws4.getRow(2).height = 32;
+
+            ws4.getCell('B4').value = currentLang === 'de' ? 'Antworttyp' : 'Response Type';
+            ws4.getCell('C4').value = 'Credits';
+            ws4.getCell('D4').value = currentLang === 'de' ? 'Beschreibung' : 'Description';
+            ws4.getCell('E4').value = 'M365 Copilot';
+            ['B4', 'C4', 'D4', 'E4'].forEach(c => styleTableHeader(ws4.getCell(c)));
+
+            const creditRates = [
+                ['Classic Answers', '1', currentLang === 'de' ? 'Vordefinierte FAQ-Antworten' : 'Predefined FAQ responses', true],
+                ['Generative Answers', '2', currentLang === 'de' ? 'KI-generierte Antworten aus Wissensquellen' : 'AI-generated answers from knowledge', true],
+                ['Tenant Graph Grounding', '10', currentLang === 'de' ? 'Zugriff auf SharePoint/M365 Daten' : 'Access to SharePoint/M365 data', true],
+                ['Agent Actions', '5', currentLang === 'de' ? 'Trigger, Topic-Wechsel, Tool-Aufrufe' : 'Triggers, topic changes, tool calls', true],
+                ['Agent Flow Actions', '13/100', currentLang === 'de' ? 'Pro 100 automatisierte Flow-Aktionen' : 'Per 100 automated flow actions', true],
+                ['Autonomous Triggers', '25', currentLang === 'de' ? 'Automatische Agent-Auslösung' : 'Automatic agent triggering', false],
+                ['Text & Gen AI (Basic)', '0.1', currentLang === 'de' ? 'Einfache KI-Aufgaben (Sentiment)' : 'Simple AI tasks (sentiment)', false],
+                ['Text & Gen AI (Standard)', '1', currentLang === 'de' ? 'Mittlere KI-Aufgaben (Entity Extraction)' : 'Medium AI tasks (entity extraction)', false],
+                ['Text & Gen AI (Premium)', '10', currentLang === 'de' ? 'Reasoning-Modelle (Deep Reasoning)' : 'Reasoning models (deep reasoning)', false],
+                ['Content Processing', '8', currentLang === 'de' ? 'Pro Seite (PDF-Extraktion etc.)' : 'Per page (PDF extraction etc.)', false]
+            ];
+
+            creditRates.forEach((item, idx) => {
+                const r = 5 + idx;
+                const isFree = item[3];
+                ws4.getCell(`B${r}`).value = item[0];
+                ws4.getCell(`C${r}`).value = item[1];
+                ws4.getCell(`D${r}`).value = item[2];
+                ws4.getCell(`E${r}`).value = isFree ? (currentLang === 'de' ? 'Kostenlos' : 'Free') : (currentLang === 'de' ? 'Berechnet' : 'Charged');
+                
+                ['B', 'C', 'D'].forEach(c => styleDataCell(ws4.getCell(`${c}${r}`), idx % 2 === 1, c === 'B' || c === 'D' ? 'left' : 'center'));
+                ws4.getCell(`E${r}`).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: isFree ? colors.success : colors.warning } };
+                ws4.getCell(`E${r}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isFree ? colors.successLight : colors.warningLight } };
+                ws4.getCell(`E${r}`).alignment = { horizontal: 'center' };
+            });
+
+            // License models
+            ws4.mergeCells('B16:E16');
+            styleHeader(ws4.getCell('B16'), colors.accent);
+            ws4.getCell('B16').value = currentLang === 'de' ? 'LIZENZMODELLE' : 'LICENSE MODELS';
+
+            ws4.getCell('B17').value = currentLang === 'de' ? 'Modell' : 'Model';
+            ws4.getCell('C17').value = currentLang === 'de' ? 'Preis' : 'Price';
+            ws4.getCell('D17').value = currentLang === 'de' ? 'Inkludiert' : 'Included';
+            ws4.getCell('E17').value = currentLang === 'de' ? 'Empfohlen für' : 'Best for';
+            ['B17', 'C17', 'D17', 'E17'].forEach(c => styleTableHeader(ws4.getCell(c)));
+
+            const licenseModels = [
+                ['Prepaid Pack', '$200/Mo', '25.000 Credits', currentLang === 'de' ? 'Stabile Nutzung' : 'Stable usage'],
+                ['Pay-As-You-Go', '$0.01/Credit', currentLang === 'de' ? 'Keine Vorabkosten' : 'No upfront cost', currentLang === 'de' ? 'Variable Nutzung' : 'Variable usage'],
+                ['Hybrid', currentLang === 'de' ? 'Packs + PAYG' : 'Packs + PAYG', currentLang === 'de' ? 'Basis + Überschuss' : 'Base + overage', currentLang === 'de' ? 'Wachsende Nutzung' : 'Growing usage']
+            ];
+
+            licenseModels.forEach((item, idx) => {
+                const r = 18 + idx;
+                ws4.getCell(`B${r}`).value = item[0];
+                ws4.getCell(`C${r}`).value = item[1];
+                ws4.getCell(`D${r}`).value = item[2];
+                ws4.getCell(`E${r}`).value = item[3];
+                ['B', 'C', 'D', 'E'].forEach(c => styleDataCell(ws4.getCell(`${c}${r}`), idx % 2 === 1, c === 'B' ? 'left' : 'center'));
+            });
+
+            // Notes
+            ws4.mergeCells('B22:E22');
+            styleHeader(ws4.getCell('B22'), colors.primary);
+            ws4.getCell('B22').value = currentLang === 'de' ? 'WICHTIGE HINWEISE' : 'IMPORTANT NOTES';
+
+            const notes = currentLang === 'de' ? [
+                'Credits werden tenant-weit gepoolt - alle Agents teilen sich den Vorrat',
+                'Nicht verbrauchte Credits verfallen am Monatsende',
+                'Bei >125% Kapazitätsnutzung werden Agents automatisch deaktiviert',
+                'PAYG-Meter als Backup empfohlen um Ausfälle zu vermeiden'
+            ] : [
+                'Credits are pooled tenant-wide - all agents share the pool',
+                'Unused credits expire at month end',
+                'Agents are automatically disabled at >125% capacity usage',
+                'PAYG meter recommended as backup to avoid outages'
+            ];
+
+            notes.forEach((note, idx) => {
+                ws4.getCell(`B${23 + idx}`).value = '• ' + note;
+                ws4.mergeCells(`B${23 + idx}:E${23 + idx}`);
+                ws4.getCell(`B${23 + idx}`).font = { name: 'Segoe UI', size: 9, color: { argb: colors.textMuted } };
+            });
+
+            // Save file
             const buffer = await workbook.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            saveAs(blob, `Copilot_Studio_${today.toISOString().split('T')[0]}.xlsx`);
+            saveAs(blob, `Copilot_Studio_Kalkulation_${today.toISOString().split('T')[0]}.xlsx`);
         }
     </script>
 </body>
