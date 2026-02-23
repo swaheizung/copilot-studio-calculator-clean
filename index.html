@@ -868,6 +868,52 @@
                         </div>
 
                         <div class="form-section" style="margin-top: 24px;">
+                            <div class="section-title" id="agentUsageModeTitle">Agent-Nutzungsmodus (Managed Environment)</div>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 12px;" id="agentUsageModeDesc">Führen Nutzer über den Copilot Studio Agent auch Power Apps oder Power Automate Flows aus? In einer Managed Environment benötigen diese Nutzer dann eine zusätzliche Premium-Lizenz.</p>
+                            <div class="radio-group" style="grid-template-columns: repeat(2, 1fr);">
+                                <label class="radio-card selected" onclick="selectUsageMode(this, 'standalone')">
+                                    <input type="radio" name="agentUsageMode" value="standalone" checked>
+                                    <div class="radio-card-title" id="standaloneLabel">Nein – Standalone Agent</div>
+                                    <div class="radio-card-desc" id="standaloneDesc">Agent wird nur zum Chatten genutzt (Teams/Website). Keine Apps/Flows für Endnutzer.</div>
+                                </label>
+                                <label class="radio-card" onclick="selectUsageMode(this, 'integrated')">
+                                    <input type="radio" name="agentUsageMode" value="integrated">
+                                    <div class="radio-card-title" id="integratedLabel">Ja – mit Apps/Flows</div>
+                                    <div class="radio-card-desc" id="integratedDesc">Nutzer führen über den Agent auch Power Apps oder Power Automate aus.</div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="info-box success" id="usageModeInfoBox">
+                            <div class="info-box-title" id="usageModeInfoTitle">Standalone Agent – Keine Premium-Pflicht</div>
+                            <p class="info-box-text" id="usageModeInfoText">Laut Microsoft: "Users of your agents don't need a special license." Die Abrechnung erfolgt über Copilot Credits. In Managed Environments brauchen reine Chat-Nutzer keine zusätzliche Premium-Lizenz. Zusätzlicher Dataverse-Bedarf wird über Pay-As-You-Go abgedeckt.</p>
+                        </div>
+
+                        <!-- Integrated Mode: Premium Licensing Options -->
+                        <div id="integratedOptions" style="display: none;">
+                            <div class="form-section" style="margin-top: 16px; border-left: 3px solid var(--accent); padding-left: 16px;">
+                                <div class="section-title" id="premiumLicensingTitle">Premium-Lizenzierung (Managed Environment)</div>
+                                <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 12px;" id="premiumLicensingDesc">Da Nutzer Power Apps/Flows ausführen, benötigen sie in einer Managed Environment eine Premium-Lizenz. Power Apps Premium kostet $20/User/Monat und enthält +250 MB Dataverse Speicher pro Lizenz.</p>
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label class="form-label" id="fullPremiumUsersLabel">Volle Premium-Lizenz ($20/Mo)</label>
+                                        <input type="number" class="form-input" id="fullPremiumUsers" value="0" min="0" onchange="updateCalculations()">
+                                        <span class="form-hint" id="fullPremiumUsersHint">Regelmäßige Nutzer – jede Lizenz bringt +250 MB Dataverse</span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" id="paygUsersLabel">PAYG-Zugang ($10/Mo)</label>
+                                        <input type="number" class="form-input" id="paygAccessUsers" value="0" min="0" onchange="updateCalculations()">
+                                        <span class="form-hint" id="paygUsersHint">Gelegentliche Nutzer – ähnlich wie "Premium Light"</span>
+                                    </div>
+                                </div>
+                                <div class="info-box warning" style="margin-top: 12px;">
+                                    <div class="info-box-title" id="premiumCostPreviewTitle">Kostenvorschau Premium-Lizenzen</div>
+                                    <p class="info-box-text" id="premiumCostPreviewText">$0/Monat für Premium + $0/Monat für PAYG = $0/Monat gesamt</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-section" style="margin-top: 24px;">
                             <div class="section-title" id="licenseModelTitle">Lizenzmodell wählen</div>
                             <div class="radio-group">
                                 <label class="radio-card selected" onclick="selectRadio(this)">
@@ -1107,6 +1153,14 @@
                                 <span id="breakdownPowerApps">$0</span>
                             </div>
                             <div class="sidebar-breakdown-item">
+                                <span id="breakdownManagedEnvLabel">Managed Env User</span>
+                                <span id="breakdownManagedEnv">$0</span>
+                            </div>
+                            <div class="sidebar-breakdown-item" id="breakdownPaygUsersRow" style="display: none;">
+                                <span id="breakdownPaygUsersLabel">PAYG User</span>
+                                <span id="breakdownPaygUsers">$0</span>
+                            </div>
+                            <div class="sidebar-breakdown-item">
                                 <span id="breakdownDataverseLabel">Dataverse Add-On</span>
                                 <span id="breakdownDataverse">$0</span>
                             </div>
@@ -1123,7 +1177,7 @@
         <footer class="footer">
             <p id="footerDisclaimer">Alle Preise basieren auf dem Microsoft Copilot Studio Licensing Guide. Nur zur Schätzung.</p>
             <div>
-                <span class="footer-version">v1.2</span>
+                <span class="footer-version">v1.3</span>
                 <span id="footerDate"> · Stand: Februar 2026</span>
             </div>
         </footer>
@@ -1250,7 +1304,26 @@
                 freeActions: "Kostenlos für M365 Copilot",
                 paidActions: "Immer berechnet",
                 free: "frei",
-                charged: "berechnet"
+                charged: "berechnet",
+                agentUsageModeTitle: "Agent-Nutzungsmodus (Managed Environment)",
+                agentUsageModeDesc: "Führen Nutzer über den Copilot Studio Agent auch Power Apps oder Power Automate Flows aus? In einer Managed Environment benötigen diese Nutzer dann eine zusätzliche Premium-Lizenz.",
+                standaloneLabel: "Nein – Standalone Agent",
+                standaloneDesc: "Agent wird nur zum Chatten genutzt (Teams/Website). Keine Apps/Flows für Endnutzer.",
+                integratedLabel: "Ja – mit Apps/Flows",
+                integratedDesc: "Nutzer führen über den Agent auch Power Apps oder Power Automate aus.",
+                standaloneInfoTitle: "Standalone Agent – Keine Premium-Pflicht",
+                standaloneInfoText: "Laut Microsoft: \"Users of your agents don't need a special license.\" Die Abrechnung erfolgt über Copilot Credits. In Managed Environments brauchen reine Chat-Nutzer keine zusätzliche Premium-Lizenz. Zusätzlicher Dataverse-Bedarf wird über Pay-As-You-Go abgedeckt.",
+                integratedInfoTitle: "Agent mit Apps/Flows – Premium erforderlich",
+                integratedInfoText: "Wenn Endnutzer über den Agent auch Power Apps oder Flows in einer Managed Environment ausführen, benötigen sie eine Power Apps Premium ($20/Mo) oder einen PAYG-Zugang ($10/Mo).",
+                premiumLicensingTitle: "Premium-Lizenzierung (Managed Environment)",
+                premiumLicensingDesc: "Da Nutzer Power Apps/Flows ausführen, benötigen sie eine Premium-Lizenz. Power Apps Premium: $20/User/Monat (+250 MB Dataverse). PAYG-Zugang: $10/User/Monat.",
+                fullPremiumUsersLabel: "Volle Premium-Lizenz ($20/Mo)",
+                fullPremiumUsersHint: "Regelmäßige Nutzer – jede Lizenz bringt +250 MB Dataverse",
+                paygUsersLabel: "PAYG-Zugang ($10/Mo)",
+                paygUsersHint: "Gelegentliche Nutzer – ähnlich wie \"Premium Light\"",
+                premiumCostPreviewTitle: "Kostenvorschau Premium-Lizenzen",
+                breakdownPaygUsersLabel: "PAYG User",
+                dataversePaygLabel: "Dataverse PAYG"
             },
             en: {
                 headerTitle: "Microsoft Copilot Studio Cost Calculator",
@@ -1370,13 +1443,33 @@
                 freeActions: "Free for M365 Copilot",
                 paidActions: "Always charged",
                 free: "free",
-                charged: "charged"
+                charged: "charged",
+                agentUsageModeTitle: "Agent Usage Mode (Managed Environment)",
+                agentUsageModeDesc: "Do users execute Power Apps or Power Automate Flows through the Copilot Studio Agent? In a Managed Environment, these users require an additional Premium license.",
+                standaloneLabel: "No – Standalone Agent",
+                standaloneDesc: "Agent is used for chatting only (Teams/Website). No Apps/Flows for end users.",
+                integratedLabel: "Yes – with Apps/Flows",
+                integratedDesc: "Users execute Power Apps or Power Automate through the Agent.",
+                standaloneInfoTitle: "Standalone Agent – No Premium Required",
+                standaloneInfoText: "Per Microsoft: \"Users of your agents don't need a special license.\" Billing is via Copilot Credits. In Managed Environments, chat-only users don't need a Premium license. Additional Dataverse needs are covered via Pay-As-You-Go.",
+                integratedInfoTitle: "Agent with Apps/Flows – Premium Required",
+                integratedInfoText: "When end users execute Power Apps or Flows through the Agent in a Managed Environment, they need Power Apps Premium ($20/Mo) or PAYG access ($10/Mo).",
+                premiumLicensingTitle: "Premium Licensing (Managed Environment)",
+                premiumLicensingDesc: "Since users execute Power Apps/Flows, they need a Premium license. Power Apps Premium: $20/user/month (+250 MB Dataverse). PAYG access: $10/user/month.",
+                fullPremiumUsersLabel: "Full Premium License ($20/Mo)",
+                fullPremiumUsersHint: "Regular users – each license adds +250 MB Dataverse",
+                paygUsersLabel: "PAYG Access ($10/Mo)",
+                paygUsersHint: "Occasional users – similar to 'Premium Light'",
+                premiumCostPreviewTitle: "Premium License Cost Preview",
+                breakdownPaygUsersLabel: "PAYG Users",
+                dataversePaygLabel: "Dataverse PAYG"
             }
         };
 
         let currentLang = 'de';
         let currentStep = 1;
         let agents = [];
+        let agentUsageMode = 'standalone'; // 'standalone' or 'integrated'
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -1420,6 +1513,37 @@
             updateCalculations();
         }
 
+        function selectUsageMode(card, mode) {
+            agentUsageMode = mode;
+            // Update radio card selection (only the usage mode radios)
+            card.closest('.radio-group').querySelectorAll('.radio-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            card.querySelector('input').checked = true;
+
+            // Show/hide integrated options
+            const integratedOptions = document.getElementById('integratedOptions');
+            integratedOptions.style.display = mode === 'integrated' ? 'block' : 'none';
+
+            // Update info box
+            const infoBox = document.getElementById('usageModeInfoBox');
+            const infoTitle = document.getElementById('usageModeInfoTitle');
+            const infoText = document.getElementById('usageModeInfoText');
+            if (mode === 'standalone') {
+                infoBox.className = 'info-box success';
+                infoTitle.textContent = t('standaloneInfoTitle');
+                infoText.textContent = t('standaloneInfoText');
+            } else {
+                infoBox.className = 'info-box warning';
+                infoTitle.textContent = t('integratedInfoTitle');
+                infoText.textContent = t('integratedInfoText');
+            }
+
+            // Show/hide sidebar rows
+            document.getElementById('breakdownPaygUsersRow').style.display = mode === 'integrated' ? 'flex' : 'none';
+
+            updateCalculations();
+        }
+
         function toggleCollapsible(header) {
             header.classList.toggle('open');
             header.nextElementSibling.classList.toggle('open');
@@ -1455,6 +1579,22 @@
             document.getElementById('m365CopilotUsers').value = 0;
             document.getElementById('powerAppsPremiumUsers').value = 0;
             document.getElementById('m365LicenseType').value = 'e3';
+            document.getElementById('fullPremiumUsers').value = 0;
+            document.getElementById('paygAccessUsers').value = 0;
+            agentUsageMode = 'standalone';
+            document.getElementById('integratedOptions').style.display = 'none';
+            document.getElementById('breakdownPaygUsersRow').style.display = 'none';
+            // Reset usage mode radio cards
+            document.querySelectorAll('input[name="agentUsageMode"]').forEach(r => {
+                r.checked = r.value === 'standalone';
+                const card = r.closest('.radio-card');
+                card.classList.toggle('selected', r.value === 'standalone');
+            });
+            // Reset info box
+            const infoBox = document.getElementById('usageModeInfoBox');
+            infoBox.className = 'info-box success';
+            document.getElementById('usageModeInfoTitle').textContent = t('standaloneInfoTitle');
+            document.getElementById('usageModeInfoText').textContent = t('standaloneInfoText');
             document.getElementById('managedEnvs').value = 3;
             document.getElementById('unmanagedEnvs').value = 2;
             document.getElementById('dbPerEnv').value = 1;
@@ -1472,6 +1612,7 @@
         const presets = {
             small: {
                 totalUsers: 50, m365CopilotUsers: 10, powerAppsPremiumUsers: 2,
+                usageMode: 'standalone', fullPremiumUsers: 0, paygAccessUsers: 0,
                 managedEnvs: 1, unmanagedEnvs: 1, dbPerEnv: 0.5, filePerEnv: 1,
                 agents: [
                     { name: 'HR FAQ Bot', users: 50, m365Users: 10, sessions: 10, classic: 3, generative: 1, graph: 0, actions: 1, flowActions: 0, autonomous: 0, aiBasic: 0, aiStandard: 0, aiPremium: 0, contentProcessing: 0 }
@@ -1479,6 +1620,7 @@
             },
             medium: {
                 totalUsers: 500, m365CopilotUsers: 100, powerAppsPremiumUsers: 20,
+                usageMode: 'integrated', fullPremiumUsers: 80, paygAccessUsers: 20,
                 managedEnvs: 3, unmanagedEnvs: 2, dbPerEnv: 2, filePerEnv: 3,
                 agents: [
                     { name: 'IT Helpdesk', users: 500, m365Users: 100, sessions: 15, classic: 2, generative: 2, graph: 1, actions: 2, flowActions: 50, autonomous: 0, aiBasic: 0, aiStandard: 1, aiPremium: 0, contentProcessing: 0 },
@@ -1488,6 +1630,7 @@
             },
             enterprise: {
                 totalUsers: 5000, m365CopilotUsers: 1500, powerAppsPremiumUsers: 200,
+                usageMode: 'integrated', fullPremiumUsers: 400, paygAccessUsers: 100,
                 managedEnvs: 8, unmanagedEnvs: 4, dbPerEnv: 5, filePerEnv: 8,
                 agents: [
                     { name: 'Global IT Support', users: 5000, m365Users: 1500, sessions: 12, classic: 2, generative: 2, graph: 2, actions: 2, flowActions: 200, autonomous: 0, aiBasic: 0, aiStandard: 1, aiPremium: 0, contentProcessing: 0 },
@@ -1505,10 +1648,32 @@
             document.getElementById('totalUsers').value = preset.totalUsers;
             document.getElementById('m365CopilotUsers').value = preset.m365CopilotUsers;
             document.getElementById('powerAppsPremiumUsers').value = preset.powerAppsPremiumUsers;
+            document.getElementById('fullPremiumUsers').value = preset.fullPremiumUsers || 0;
+            document.getElementById('paygAccessUsers').value = preset.paygAccessUsers || 0;
             document.getElementById('managedEnvs').value = preset.managedEnvs;
             document.getElementById('unmanagedEnvs').value = preset.unmanagedEnvs;
             document.getElementById('dbPerEnv').value = preset.dbPerEnv;
             document.getElementById('filePerEnv').value = preset.filePerEnv;
+            // Set usage mode
+            const usageMode = preset.usageMode || 'standalone';
+            agentUsageMode = usageMode;
+            document.querySelectorAll('input[name="agentUsageMode"]').forEach(r => {
+                r.checked = r.value === usageMode;
+                const card = r.closest('.radio-card');
+                card.classList.toggle('selected', r.value === usageMode);
+            });
+            document.getElementById('integratedOptions').style.display = usageMode === 'integrated' ? 'block' : 'none';
+            document.getElementById('breakdownPaygUsersRow').style.display = usageMode === 'integrated' ? 'flex' : 'none';
+            const infoBox = document.getElementById('usageModeInfoBox');
+            if (usageMode === 'standalone') {
+                infoBox.className = 'info-box success';
+                document.getElementById('usageModeInfoTitle').textContent = t('standaloneInfoTitle');
+                document.getElementById('usageModeInfoText').textContent = t('standaloneInfoText');
+            } else {
+                infoBox.className = 'info-box warning';
+                document.getElementById('usageModeInfoTitle').textContent = t('integratedInfoTitle');
+                document.getElementById('usageModeInfoText').textContent = t('integratedInfoText');
+            }
             agents = preset.agents.map((a, i) => ({ id: Date.now() + i, ...a }));
             renderAgentCards();
             updateCalculations();
@@ -1689,7 +1854,8 @@
             dataverseDbPerGb: 40, dataverseFilePerGb: 2, powerAppsPremium: 20,
             defaultDbCapacity: 15, defaultFileCapacity: 20,
             powerAppsFirstDbCapacity: 20, powerAppsAdditionalDbCapacity: 0.25,
-            powerAppsFirstFileCapacity: 20, powerAppsAdditionalFileCapacity: 2
+            powerAppsFirstFileCapacity: 20, powerAppsAdditionalFileCapacity: 2,
+            powerAppsPerApp: 5 // $5/user/app/month
         };
 
         const CREDIT_RATES_FREE = { classic: 1, generative: 2, graph: 10, actions: 5, flowActions: 0.13 };
@@ -1735,6 +1901,13 @@
                 if (powerAppsUsers > 1) {
                     dbAvailable += (powerAppsUsers - 1) * PRICING.powerAppsAdditionalDbCapacity;
                     fileAvailable += (powerAppsUsers - 1) * PRICING.powerAppsAdditionalFileCapacity;
+                }
+            }
+            // In integrated mode, new premium users also add Dataverse capacity
+            if (agentUsageMode === 'integrated') {
+                const fullPremium = parseInt(document.getElementById('fullPremiumUsers').value) || 0;
+                if (fullPremium > 0) {
+                    dbAvailable += fullPremium * PRICING.powerAppsAdditionalDbCapacity; // +250MB each
                 }
             }
             return { dbNeeded, fileNeeded, dbAvailable, fileAvailable, dbShortfall: Math.max(0, dbNeeded - dbAvailable), fileShortfall: Math.max(0, fileNeeded - fileAvailable) };
@@ -1815,8 +1988,45 @@
             let dataverseCost = capacityOptions.length > 0 ? capacityOptions[0].cost : 0;
             const powerAppsUsers = parseInt(document.getElementById('powerAppsPremiumUsers').value) || 0;
             const powerAppsCost = powerAppsUsers * PRICING.powerAppsPremium;
-            const totalMonthly = copilotStudioCost + dataverseCost + paygOverage + powerAppsCost;
-            return { totalCredits, recommendedPacks, copilotStudioCost, dataverseCost, paygOverage, powerAppsCost, powerAppsUsers, totalMonthly, totalYearly: totalMonthly * 12, dataverseNeeds, capacityOptions, licenseModel };
+            
+            // Agent Usage Mode: Managed Environment User Licensing
+            let managedEnvUserCost = 0;
+            let paygAccessUserCost = 0;
+            let fullPremiumUsers = 0;
+            let paygAccessUsers = 0;
+            
+            if (agentUsageMode === 'integrated') {
+                // Integrated mode: users need Premium licenses
+                fullPremiumUsers = parseInt(document.getElementById('fullPremiumUsers').value) || 0;
+                paygAccessUsers = parseInt(document.getElementById('paygAccessUsers').value) || 0;
+                managedEnvUserCost = fullPremiumUsers * PRICING.powerAppsPremium; // $20/user
+                paygAccessUserCost = paygAccessUsers * 10; // $10/user PAYG
+                
+                // Update premium cost preview
+                const previewText = document.getElementById('premiumCostPreviewText');
+                if (previewText) {
+                    previewText.textContent = `$${managedEnvUserCost}/Mo (${fullPremiumUsers} × $20 Premium) + $${paygAccessUserCost}/Mo (${paygAccessUsers} × $10 PAYG) = $${managedEnvUserCost + paygAccessUserCost}/Mo`;
+                }
+            } else {
+                // Standalone mode: use PAYG for additional Dataverse if needed
+                // Override dataverse cost calculation to use PAYG pricing ($48/GB) instead of Add-On ($40/GB)
+                if (dataverseNeeds.dbShortfall > 0) {
+                    dataverseCost = Math.ceil(dataverseNeeds.dbShortfall) * 48; // PAYG rate
+                    if (dataverseNeeds.fileShortfall > 0) {
+                        dataverseCost += Math.ceil(dataverseNeeds.fileShortfall) * 2.4; // PAYG file rate
+                    }
+                }
+            }
+            
+            const totalMonthly = copilotStudioCost + dataverseCost + paygOverage + powerAppsCost + managedEnvUserCost + paygAccessUserCost;
+            return { 
+                totalCredits, recommendedPacks, copilotStudioCost, dataverseCost, paygOverage, 
+                powerAppsCost, powerAppsUsers, 
+                managedEnvUserCost, fullPremiumUsers, paygAccessUserCost, paygAccessUsers,
+                totalMonthly, totalYearly: totalMonthly * 12, 
+                dataverseNeeds, capacityOptions, licenseModel,
+                agentUsageMode
+            };
         }
 
         function updateCalculations() {
@@ -1831,6 +2041,29 @@
             document.getElementById('breakdownPowerApps').textContent = `$${costs.powerAppsCost.toLocaleString()}`;
             document.getElementById('breakdownDataverse').textContent = `$${costs.dataverseCost.toLocaleString()}`;
             document.getElementById('breakdownPayg').textContent = `$${costs.paygOverage.toLocaleString()}`;
+            document.getElementById('breakdownManagedEnv').textContent = `$${costs.managedEnvUserCost.toLocaleString()}`;
+            document.getElementById('breakdownPaygUsers').textContent = `$${costs.paygAccessUserCost.toLocaleString()}`;
+            
+            // Update managed env label based on mode
+            if (agentUsageMode === 'integrated') {
+                document.getElementById('breakdownManagedEnvLabel').textContent = 'Premium User';
+                document.getElementById('breakdownPaygUsersRow').style.display = 'flex';
+            } else {
+                document.getElementById('breakdownManagedEnvLabel').textContent = '';
+                document.getElementById('breakdownManagedEnv').textContent = '';
+                document.getElementById('breakdownPaygUsersRow').style.display = 'none';
+            }
+            
+            // Update dataverse label based on mode
+            if (agentUsageMode === 'standalone' && costs.dataverseCost > 0) {
+                document.getElementById('breakdownDataverseLabel').textContent = t('dataversePaygLabel') || 'Dataverse PAYG';
+            } else {
+                document.getElementById('breakdownDataverseLabel').textContent = t('breakdownDataverseLabel') || 'Dataverse Add-On';
+            }
+            
+            // Show/hide apps per user field - no longer needed
+            // const appsPerUserGroup = document.getElementById('appsPerUserGroup');
+            // appsPerUserGroup handled by selectUsageMode now
 
             document.getElementById('totalDbNeeded').textContent = `${costs.dataverseNeeds.dbNeeded.toFixed(1)} GB`;
             document.getElementById('totalDbAvailable').textContent = `${costs.dataverseNeeds.dbAvailable.toFixed(1)} GB`;
@@ -1869,6 +2102,12 @@
                 breakdownRows.push({ category: t('paygCredits'), details: `${costs.totalCredits.toLocaleString()} Credits × $${PRICING.paygPricePerCredit}`, monthly: costs.copilotStudioCost, yearly: costs.copilotStudioCost * 12 });
             }
             if (costs.powerAppsCost > 0) breakdownRows.push({ category: t('powerAppsPremium'), details: `${costs.powerAppsUsers} × $${PRICING.powerAppsPremium}/Mo`, monthly: costs.powerAppsCost, yearly: costs.powerAppsCost * 12 });
+            if (costs.managedEnvUserCost > 0) {
+                breakdownRows.push({ category: 'Power Apps Premium (Managed Env)', details: `${costs.fullPremiumUsers} × $${PRICING.powerAppsPremium}/Mo`, monthly: costs.managedEnvUserCost, yearly: costs.managedEnvUserCost * 12 });
+            }
+            if (costs.paygAccessUserCost > 0) {
+                breakdownRows.push({ category: 'PAYG User Access', details: `${costs.paygAccessUsers} × $10/Mo`, monthly: costs.paygAccessUserCost, yearly: costs.paygAccessUserCost * 12 });
+            }
             if (costs.paygOverage > 0) breakdownRows.push({ category: t('paygOverage'), details: t('creditsOverPack'), monthly: costs.paygOverage, yearly: costs.paygOverage * 12 });
             if (costs.dataverseCost > 0) { const best = costs.capacityOptions.find(o => o.isBest); breakdownRows.push({ category: best?.name || 'Dataverse', details: best ? best.dbCapacity : '', monthly: costs.dataverseCost, yearly: costs.dataverseCost * 12 }); }
             breakdownRows.push({ category: t('total'), details: '', monthly: costs.totalMonthly, yearly: costs.totalYearly, isTotal: true });
@@ -1981,11 +2220,17 @@
                 [currentLang === 'de' ? 'Gesamtnutzer' : 'Total Users', parseInt(document.getElementById('totalUsers').value)],
                 [currentLang === 'de' ? 'M365 Copilot Nutzer' : 'M365 Copilot Users', parseInt(document.getElementById('m365CopilotUsers').value)],
                 [currentLang === 'de' ? 'Power Apps Premium Nutzer' : 'Power Apps Premium Users', parseInt(document.getElementById('powerAppsPremiumUsers').value)],
+                [currentLang === 'de' ? 'Agent-Nutzungsmodus' : 'Agent Usage Mode', agentUsageMode === 'standalone' ? (currentLang === 'de' ? 'Standalone (nur Chat)' : 'Standalone (chat only)') : (currentLang === 'de' ? 'Integriert (mit Apps/Flows)' : 'Integrated (with Apps/Flows)')],
                 [currentLang === 'de' ? 'Managed Environments' : 'Managed Environments', parseInt(document.getElementById('managedEnvs').value) || 0],
                 [currentLang === 'de' ? 'Standard Environments' : 'Standard Environments', parseInt(document.getElementById('unmanagedEnvs').value) || 0],
                 [currentLang === 'de' ? 'Anzahl Agents' : 'Number of Agents', agents.length],
                 [currentLang === 'de' ? 'Lizenzmodell' : 'License Model', costs.licenseModel === 'prepaid' ? 'Prepaid Packs' : costs.licenseModel === 'payg' ? 'Pay-As-You-Go' : 'Hybrid']
             ];
+            
+            if (agentUsageMode === 'integrated') {
+                summaryData.push([currentLang === 'de' ? 'Premium-Nutzer ($20/Mo)' : 'Premium Users ($20/Mo)', costs.fullPremiumUsers]);
+                summaryData.push([currentLang === 'de' ? 'PAYG-Nutzer ($10/Mo)' : 'PAYG Users ($10/Mo)', costs.paygAccessUsers]);
+            }
 
             summaryData.forEach((item, idx) => {
                 ws1.getCell(`B${row}`).value = item[0];
@@ -2049,9 +2294,20 @@
                 copilotLabel = currentLang === 'de' ? `Copilot Studio (${costs.recommendedPacks} Pack${costs.recommendedPacks > 1 ? 's' : ''} Hybrid)` : `Copilot Studio (${costs.recommendedPacks} Pack${costs.recommendedPacks > 1 ? 's' : ''} Hybrid)`;
             }
 
+            // Build managed env label
+            let managedEnvLabel = currentLang === 'de' ? 'Managed Env Nutzerlizenzen' : 'Managed Env User Licenses';
+            if (costs.managedEnvUserCost > 0) {
+                if (costs.managedEnvLicenseType === 'premium') {
+                    managedEnvLabel = currentLang === 'de' ? `Managed Env (${costs.managedEnvUsers} × Premium)` : `Managed Env (${costs.managedEnvUsers} × Premium)`;
+                } else {
+                    managedEnvLabel = currentLang === 'de' ? `Managed Env (${costs.managedEnvUsers} × ${costs.appsPerUser} App${costs.appsPerUser > 1 ? 's' : ''})` : `Managed Env (${costs.managedEnvUsers} × ${costs.appsPerUser} App${costs.appsPerUser > 1 ? 's' : ''})`;
+                }
+            }
+
             const costData = [
                 [copilotLabel, costs.copilotStudioCost, costs.copilotStudioCost * 12],
                 [currentLang === 'de' ? 'Power Apps Premium Lizenzen' : 'Power Apps Premium Licenses', costs.powerAppsCost, costs.powerAppsCost * 12],
+                [managedEnvLabel, costs.managedEnvUserCost, costs.managedEnvUserCost * 12],
                 [currentLang === 'de' ? 'Dataverse Kapazität' : 'Dataverse Capacity', costs.dataverseCost, costs.dataverseCost * 12],
                 [currentLang === 'de' ? 'PAYG Überschuss' : 'PAYG Overage', costs.paygOverage, costs.paygOverage * 12]
             ];
